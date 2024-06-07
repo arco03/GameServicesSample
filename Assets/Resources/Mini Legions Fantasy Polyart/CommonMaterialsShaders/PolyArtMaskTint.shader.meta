@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 8f8097b2df09fb742aac2175193c8209
+timeCreated: 1578449403
+licenseType: Store
+ShaderImporter:
+  defaultTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 160705
+  packageName: Mini Legions Fantasy Polyart
+  packageVersion: 1.1
+  assetPath: Assets/Mini Legions Fantasy Polyart/CommonMaterialsShaders/PolyArtMaskTint.shader
+  uploadId: 421913
