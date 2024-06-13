@@ -14,15 +14,16 @@
     float4    _MainTex_TexelSize;
     float4    _MainTex_ST;
 
-    #define MAX_TAPS 64
-
     #ifdef MAX_TAPS_64
     #define MAX_TAPS 64
     #elif MAX_TAPS_32
     #define MAX_TAPS 32
     #elif MAX_TAPS_8
     #define MAX_TAPS 8
+    #else
+    #define MAX_TAPS 64
     #endif
+
 
     float _Weights[MAX_TAPS];
     float _Offsets[MAX_TAPS];
