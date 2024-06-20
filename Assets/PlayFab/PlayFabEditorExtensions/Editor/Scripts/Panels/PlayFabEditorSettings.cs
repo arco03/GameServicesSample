@@ -12,7 +12,8 @@ namespace PlayFab.PfEditor
     public class PlayFabEditorSettings : UnityEditor.Editor
     {
         #region panel variables
-        public enum SubMenuStates
+
+        private enum SubMenuStates
         {
             StandardSettings,
             TitleSettings,
@@ -25,7 +26,7 @@ namespace PlayFab.PfEditor
             UnityWww, // High compatability Unity api calls
 #endif
             UnityWebRequest, // Modern unity HTTP component
-            HttpWebRequest, // High performance multi-threaded api calls
+            HttpWebRequest, // High performance multithreaded api calls
             CustomHttp //If this is used, you must set the Http to an IPlayFabHttp object.
         }
 
