@@ -1,6 +1,6 @@
 {
     "_version": "4.0",
-    "_rootDirectory": "Assets/PluginMaster/DesignTools/Editor/PrefabWorldBuilder",
+    "_rootDirectory": "Assets/Plugins/DesignTools/Editor/PrefabWorldBuilder",
     "_autoSavePeriodMinutes": 1,
     "_undoBrushProperties": true,
     "_undoPalette": true,

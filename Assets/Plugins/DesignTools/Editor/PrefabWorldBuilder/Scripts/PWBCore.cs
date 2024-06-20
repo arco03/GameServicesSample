@@ -534,7 +534,7 @@ namespace PluginMaster
         public const string DATA_DIR = "Data";
         public const string FILE_NAME = "PWBData";
         public const string FULL_FILE_NAME = FILE_NAME + ".txt";
-        public const string RELATIVE_TOOL_DIR = "PluginMaster/DesignTools/Editor/PrefabWorldBuilder";
+        public const string RELATIVE_TOOL_DIR = "Plugins/DesignTools/Editor/PrefabWorldBuilder";
         public const string RELATIVE_RESOURCES_DIR = RELATIVE_TOOL_DIR + "/Resources";
         public const string RELATIVE_DATA_DIR = RELATIVE_RESOURCES_DIR + "/" + DATA_DIR;
         public const string PALETTES_DIR = "Palettes";
