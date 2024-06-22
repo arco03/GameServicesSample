@@ -72,3 +72,4 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 Assets/PlayFab/PlayFabSDK/Shared/Public/Resources/PlayFabSharedSettings.asset
 Assets/PlayFab/PlayFabEditorExtensions/Editor/Resources/PlayFabEditorPrefsSO.asset
+/Assets/PlayFabEditorExtensions/Editor/Resources
