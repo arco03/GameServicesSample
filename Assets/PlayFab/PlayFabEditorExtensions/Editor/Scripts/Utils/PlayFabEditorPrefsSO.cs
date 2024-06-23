@@ -31,7 +31,7 @@ namespace PlayFab.PfEditor
                     Directory.CreateDirectory(Path.Combine(Application.dataPath, "PlayFabEditorExtensions/Editor/Resources"));
 
                 // TODO: we know the location of this file will be under  PlayFabEditorExtensions/Editor/ 
-                // just need to pull that files path, and append /Resrouces/ and boom you have the below path.
+                // just need to pull that files path, and append /Resources/ and boom you have the below path.
                 // consider moving this above the if directory exists so we can do the same logic beforehand.
                 Directory.GetFiles(Application.dataPath, "PlayFabEditor.cs");
 
