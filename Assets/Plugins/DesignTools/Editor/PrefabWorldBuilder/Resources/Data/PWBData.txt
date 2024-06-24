@@ -1,5 +1,5 @@
 {
-    "_version": "4.0",
+    "_version": "4.1",
     "_rootDirectory": "Assets/Plugins/DesignTools/Editor/PrefabWorldBuilder",
     "_autoSavePeriodMinutes": 1,
     "_undoBrushProperties": true,
@@ -8,6 +8,7 @@
     "_closeAllWindowsWhenClosingTheToolbar": false,
     "_selectTheNextPaletteInAlphabeticalOrder": true,
     "_thumbnailLayer": 7,
+    "_maxPreviewCountInEditMode": 200,
     "_unsavedChangesAction": 0,
     "_tempCollidersAction": 1,
     "_paletteManager": {
@@ -18,7 +19,7 @@
         "_showTabsInMultipleRows": false,
         "_iconSize": 64
     },
-    "pinManager": {
+    "_pinManager": {
         "_profileKeys": [
             "Default"
         ],

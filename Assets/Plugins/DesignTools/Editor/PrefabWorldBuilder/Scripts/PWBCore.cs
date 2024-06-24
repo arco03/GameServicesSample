@@ -120,12 +120,12 @@ namespace PluginMaster
             = new System.Collections.Generic.Dictionary<int, GameObject>();
         private static System.Collections.Generic.Dictionary<int, GameObject> _tempCollidersTargets
             = new System.Collections.Generic.Dictionary<int, GameObject>();
-        private static System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>
+        private static System.Collections.Generic.Dictionary<int, System.Collections.Generic.HashSet<int>>
             _tempCollidersTargetParentsIds
-            = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>();
-        private static System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>
+            = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.HashSet<int>>();
+        private static System.Collections.Generic.Dictionary<int, System.Collections.Generic.HashSet<int>>
             _tempCollidersTargetChildrenIds
-            = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<int>>();
+            = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.HashSet<int>>();
 
         private static BoundsOctree<MeshFilter> _meshFilterOctree = new BoundsOctree<MeshFilter>(10, Vector3.zero, 0.5f, 0.5f);
         private static PointOctree<MeshFilter> _meshFilterPointOctree = new PointOctree<MeshFilter>(10, Vector3.zero, 0.5f);
@@ -213,11 +213,11 @@ namespace PluginMaster
             foreach (var parent in parents)
             {
                 if (!_tempCollidersTargetParentsIds.ContainsKey(target.GetInstanceID()))
-                    _tempCollidersTargetParentsIds.Add(target.GetInstanceID(), new System.Collections.Generic.List<int>());
+                    _tempCollidersTargetParentsIds.Add(target.GetInstanceID(), new System.Collections.Generic.HashSet<int>());
                 _tempCollidersTargetParentsIds[target.GetInstanceID()].Add(parent.gameObject.GetInstanceID());
                 if (!_tempCollidersTargetChildrenIds.ContainsKey(parent.gameObject.GetInstanceID()))
                     _tempCollidersTargetChildrenIds.Add(parent.gameObject.GetInstanceID(),
-                        new System.Collections.Generic.List<int>());
+                        new System.Collections.Generic.HashSet<int>());
                 _tempCollidersTargetChildrenIds[parent.gameObject.GetInstanceID()].Add(target.GetInstanceID());
             }
         }
@@ -225,7 +225,7 @@ namespace PluginMaster
         private static GameObject CreateTempCollider(GameObject target, Mesh mesh)
         {
             if (target == null || mesh == null) return null;
-            var differentVertices = new System.Collections.Generic.List<Vector3>();
+            var differentVertices = new System.Collections.Generic.HashSet<Vector3>();
             foreach (var vertex in mesh.vertices)
             {
                 if (!differentVertices.Contains(vertex)) differentVertices.Add(vertex);
@@ -534,11 +534,11 @@ namespace PluginMaster
         public const string DATA_DIR = "Data";
         public const string FILE_NAME = "PWBData";
         public const string FULL_FILE_NAME = FILE_NAME + ".txt";
-        public const string RELATIVE_TOOL_DIR = "Plugins/DesignTools/Editor/PrefabWorldBuilder";
+        public const string RELATIVE_TOOL_DIR = "PluginMaster/DesignTools/Editor/PrefabWorldBuilder";
         public const string RELATIVE_RESOURCES_DIR = RELATIVE_TOOL_DIR + "/Resources";
         public const string RELATIVE_DATA_DIR = RELATIVE_RESOURCES_DIR + "/" + DATA_DIR;
         public const string PALETTES_DIR = "Palettes";
-        public const string VERSION = "4.0";
+        public const string VERSION = "4.1";
         [SerializeField] private string _version = VERSION;
         [SerializeField] private string _rootDirectory = null;
         [SerializeField] private int _autoSavePeriodMinutes = 1;
@@ -548,7 +548,8 @@ namespace PluginMaster
         [SerializeField] private bool _closeAllWindowsWhenClosingTheToolbar = false;
         [SerializeField] private bool _selectTheNextPaletteInAlphabeticalOrder = true;
         [SerializeField] private int _thumbnailLayer = 7;
-       
+        [SerializeField] private int _maxPreviewCountInEditMode = 200;
+
         public enum UnsavedChangesAction { ASK, SAVE, DISCARD }
         [SerializeField] private UnsavedChangesAction _unsavedChangesAction = UnsavedChangesAction.ASK;
 
@@ -562,7 +563,7 @@ namespace PluginMaster
 
         [SerializeField] private PaletteManager _paletteManager = PaletteManager.instance;
 
-        [SerializeField] private PinManager pinManager = PinManager.instance as PinManager;
+        [SerializeField] private PinManager _pinManager = PinManager.instance as PinManager;
         [SerializeField] private BrushManager _brushManager = BrushManager.instance as BrushManager;
         [SerializeField] private GravityToolManager _gravityToolManager = GravityToolManager.instance as GravityToolManager;
         [SerializeField] private LineManager _lineManager = LineManager.instance as LineManager;
@@ -654,8 +655,8 @@ namespace PluginMaster
             get => _selectTheNextPaletteInAlphabeticalOrder;
             set
             {
-                if(_selectTheNextPaletteInAlphabeticalOrder == value) return;
-                _selectTheNextPaletteInAlphabeticalOrder= value;
+                if (_selectTheNextPaletteInAlphabeticalOrder == value) return;
+                _selectTheNextPaletteInAlphabeticalOrder = value;
                 SaveAndUpdateVersion();
             }
         }
@@ -668,6 +669,18 @@ namespace PluginMaster
                 value = Mathf.Clamp(value, 0, 31);
                 if (_thumbnailLayer == value) return;
                 _thumbnailLayer = value;
+                SaveAndUpdateVersion();
+            }
+        }
+
+        public int maxPreviewCountInEditMode
+        {
+            get => _maxPreviewCountInEditMode;
+            set
+            {
+                value = Mathf.Max(value, 0);
+                if(_maxPreviewCountInEditMode == value) return;
+                _maxPreviewCountInEditMode = value;
                 SaveAndUpdateVersion();
             }
         }
@@ -697,48 +710,31 @@ namespace PluginMaster
         public bool saving => _saving;
         public bool VersionUpdate()
         {
-            var currentText = ReadDataText();
-            if (currentText == null) return false;
+            string currentText = null;
             PWBDataVersion dataVersion = null;
-            try
-            {
-                dataVersion = JsonUtility.FromJson<PWBDataVersion>(currentText);
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogException(e);
-            }
-            if (dataVersion == null)
-            {
-                DeleteFile();
-                return false;
-            }
-            bool V1_9()
-            {
-                if (dataVersion.IsOlderThan("1.10"))
-                {
-                    var v1_9_data = JsonUtility.FromJson<V1_9_PWBData>(currentText);
-                    var v1_9_sceneItems = v1_9_data._lineManager._unsavedProfile._sceneLines;
-                    if (v1_9_sceneItems == null || v1_9_sceneItems.Length == 0) return false;
-                    foreach (var v1_9_sceneData in v1_9_sceneItems)
-                    {
-                        var v1_9_sceneLines = v1_9_sceneData._lines;
-                        if (v1_9_sceneItems == null || v1_9_sceneItems.Length == 0) return false;
-                        foreach (var v1_9_sceneLine in v1_9_sceneLines)
-                        {
-                            if (v1_9_sceneLines == null || v1_9_sceneLines.Length == 0) return false;
-                            var lineData = new LineData(v1_9_sceneLine._id, v1_9_sceneLine._data._controlPoints,
-                                v1_9_sceneLine._objectPoses, v1_9_sceneLine._initialBrushId,
-                                v1_9_sceneLine._data._closed, v1_9_sceneLine._settings);
-                            LineManager.instance.AddPersistentItem(v1_9_sceneData._sceneGUID, lineData);
-                        }
-                    }
-                    return true;
-                }
-                return false;
-            }
-            var updated = V1_9();
 
+            bool ReadTextAndGetVersion()
+            {
+                currentText = ReadDataText();
+                if (currentText == null) return false;
+                try
+                {
+                    dataVersion = JsonUtility.FromJson<PWBDataVersion>(currentText);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogException(e);
+                }
+                if (dataVersion == null)
+                {
+                    DeleteFile();
+                    return false;
+                }
+                return true;
+            }
+
+            if (!ReadTextAndGetVersion()) return false;
+            var updated = false;
             if (dataVersion.IsOlderThan("2.9"))
             {
                 var v2_8_data = JsonUtility.FromJson<V2_8_PWBData>(currentText);
@@ -754,11 +750,66 @@ namespace PluginMaster
                     var assetPath = UnityEditor.AssetDatabase.GetAssetPath(textAssets[i]);
                     UnityEditor.AssetDatabase.DeleteAsset(assetPath);
                 }
-                PWBCore.staticData.Save(false);
-
+                PWBCore.staticData.Save(updateVersion: false);
                 PrefabPalette.RepainWindow();
                 updated = true;
             }
+            if (updated) if(!ReadTextAndGetVersion()) return false;
+            if (dataVersion.IsOlderThan("4.1"))
+            {
+                var v4_0_data = JsonUtility.FromJson<V4_0_PWBData>(currentText);
+                var v4_0_lineSceneItems = v4_0_data._lineManager._sceneItems;
+                foreach (var v4_0_sceneItem in v4_0_lineSceneItems)
+                {
+                    var v4_0_items = v4_0_sceneItem._items;
+                    foreach (var v4_0_item in v4_0_items)
+                    {
+                        var data = LineManager.instance.GetItem(v4_0_item._id);
+                        var v4_0_poses = v4_0_item._objectPoses;
+                        data.RemoveAllPoses();
+                        foreach (var v4_0_pose in v4_0_poses)
+                        {
+                            var pose = new ObjectPose(v4_0_pose._position, v4_0_pose._localRotation, v4_0_pose._localScale);
+                            data.AddPose(v4_0_pose._id, pose);
+                        }
+                    }
+                }
+                var v4_0_shapeSceneItems = v4_0_data._shapeManager._sceneItems;
+                foreach (var v4_0_sceneItem in v4_0_shapeSceneItems)
+                {
+                    var v4_0_items = v4_0_sceneItem._items;
+                    foreach (var v4_0_item in v4_0_items)
+                    {
+                        var data = ShapeManager.instance.GetItem(v4_0_item._id);
+                        var v4_0_poses = v4_0_item._objectPoses;
+                        data.RemoveAllPoses();
+                        foreach (var v4_0_pose in v4_0_poses)
+                        {
+                            var pose = new ObjectPose(v4_0_pose._position, v4_0_pose._localRotation, v4_0_pose._localScale);
+                            data.AddPose(v4_0_pose._id, pose);
+                        }
+                    }
+                }
+                var v4_0_tilingSceneItems = v4_0_data._tilingManager._sceneItems;
+                foreach (var v4_0_sceneItem in v4_0_tilingSceneItems)
+                {
+                    var v4_0_items = v4_0_sceneItem._items;
+                    foreach (var v4_0_item in v4_0_items)
+                    {
+                        var data = TilingManager.instance.GetItem(v4_0_item._id);
+                        var v4_0_poses = v4_0_item._objectPoses;
+                        data.RemoveAllPoses();
+                        foreach (var v4_0_pose in v4_0_poses)
+                        {
+                            var pose = new ObjectPose(v4_0_pose._position, v4_0_pose._localRotation, v4_0_pose._localScale);
+                            data.AddPose(v4_0_pose._id, pose);
+                        }
+                    }
+                }
+                PWBCore.staticData.Save(updateVersion: false);
+                updated = true;
+            }
+            if (updated) PWBCore.AssetDatabaseRefresh();
             return updated;
         }
 
@@ -2359,6 +2410,8 @@ namespace PluginMaster
             UnityEditor.AssetDatabase.importPackageFailed += OnImportPackageFailed;
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpening += OnSceneOpening;
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += OnSceneOpened;
+            //UnityEditor.ObjectChangeEvents.changesPublished += ChangesPublished;
+
             const string firstInitSessionStateKey = "PWBFirstInitDone";
             if (!UnityEditor.SessionState.GetBool(firstInitSessionStateKey, false))
             {
@@ -2411,7 +2464,7 @@ namespace PluginMaster
         }
         private static void OnImportPackageFailed(string packageName, string errorMessage) => _importingPackage = false;
     }
-    
+
     public class DataReimportHandler : UnityEditor.AssetPostprocessor
     {
         private static bool _importingAssets = false;
@@ -2433,7 +2486,7 @@ namespace PluginMaster
             paths.AddRange(deletedAssets);
             paths.AddRange(movedAssets);
             paths.AddRange(movedFromAssetPaths);
-            
+
             var relativeDataPath = PWBSettings.relativeDataDir.Replace(Application.dataPath, string.Empty);
 
             if (paths.Exists(p => p.Contains(relativeDataPath) && System.IO.Path.GetExtension(p) == ".txt"))
@@ -2446,7 +2499,7 @@ namespace PluginMaster
             }
         }
     }
-    
+
 
     #endregion
 
@@ -2515,61 +2568,51 @@ namespace PluginMaster
     }
     #endregion
 
-    #region DATA 1.9
-    [System.Serializable]
-    public class V1_9_LineData
-    {
-        [SerializeField] public LinePoint[] _controlPoints;
-        [SerializeField] public bool _closed;
-    }
-
-    [System.Serializable]
-    public class V1_9_PersistentLineData
-    {
-        [SerializeField] public long _id;
-        [SerializeField] public long _initialBrushId;
-        [SerializeField] public V1_9_LineData _data;
-        [SerializeField] public LineSettings _settings;
-        [SerializeField] public ObjectPose[] _objectPoses;
-    }
-
-    [System.Serializable]
-    public class V1_9_SceneLines
-    {
-        [SerializeField] public string _sceneGUID;
-        [SerializeField] public V1_9_PersistentLineData[] _lines;
-    }
-
-    [System.Serializable]
-    public class V1_9_Profile
-    {
-        [SerializeField] public V1_9_SceneLines[] _sceneLines;
-    }
-
-    [System.Serializable]
-    public class V1_9_LineManager
-    {
-        [SerializeField] public V1_9_Profile _unsavedProfile;
-    }
-
-    [System.Serializable]
-    public class V1_9_PWBData
-    {
-        [SerializeField] public V1_9_LineManager _lineManager;
-    }
-    #endregion
-
     #region DATA 2.8
     [System.Serializable]
     public class V2_8_PaletteManager
     {
         [SerializeField] public PaletteData[] _paletteData;
     }
-
     [System.Serializable]
     public class V2_8_PWBData
     {
         [SerializeField] public V2_8_PaletteManager _paletteManager;
+    }
+    #endregion
+
+    #region DATA 4.0
+    [System.Serializable]
+    public struct V4_0_ObjectPose
+    {
+        [SerializeField] public ObjectId _id;
+        [SerializeField] public Vector3 _position;
+        [SerializeField] public Quaternion _localRotation;
+        [SerializeField] public Vector3 _localScale;
+    }
+    [System.Serializable]
+    public struct V4_0_ToolData
+    {
+        [SerializeField] public long _id;
+        [SerializeField] public V4_0_ObjectPose[] _objectPoses;
+    }
+    [System.Serializable]
+    public struct V4_0_SceneData
+    {
+        [SerializeField] public V4_0_ToolData[] _items;
+    }
+    [System.Serializable]
+    public struct V4_0_ToolManager
+    {
+        [SerializeField] public V4_0_SceneData[] _sceneItems;
+    }
+    [System.Serializable]
+    public struct V4_0_PWBData
+    {
+        [SerializeField] public PinManager pinManager;
+        [SerializeField] public V4_0_ToolManager _lineManager;
+        [SerializeField] public V4_0_ToolManager _shapeManager;
+        [SerializeField] public V4_0_ToolManager _tilingManager;
     }
     #endregion
 }

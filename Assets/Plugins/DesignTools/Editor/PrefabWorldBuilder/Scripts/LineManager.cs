@@ -214,10 +214,14 @@ namespace PluginMaster
                 UpdatePath();
             }
         }
-        public override void SetPoint(int idx, Vector3 value, bool registerUndo, bool selectAll, bool moveSelection = true)
+        public override bool SetPoint(int idx, Vector3 value, bool registerUndo, bool selectAll, bool moveSelection = true)
         {
-            base.SetPoint(idx, value, registerUndo, selectAll, moveSelection);
-            UpdatePath();
+            if (base.SetPoint(idx, value, registerUndo, selectAll, moveSelection))
+            {
+                UpdatePath();
+                return true;
+            }
+            return false;
         }
 
         public void SetRotatedPoint(int idx, Vector3 value, bool registerUndo)
@@ -290,8 +294,6 @@ namespace PluginMaster
 
         public bool closed => _closed;
 
-
-
         protected override void Initialize()
         {
             base.Initialize();
@@ -301,23 +303,8 @@ namespace PluginMaster
             deserializing = false;
         }
         public LineData() : base() { }
-        public LineData(GameObject[] objects, long initialBrushId, LineData lineData)
+        public LineData((GameObject, int)[] objects, long initialBrushId, LineData lineData)
             : base(objects, initialBrushId, lineData) { }
-
-        //for compatibility with version 1.9
-        public LineData(long id, LinePoint[] controlPoints, ObjectPose[] objectPoses,
-            long initialBrushId, bool closed, LineSettings settings)
-        {
-            _id = id;
-            _controlPoints = new System.Collections.Generic.List<LinePoint>(controlPoints);
-            _initialBrushId = initialBrushId;
-            _closed = closed;
-            _settings = settings;
-            base.UpdatePoints();
-            UpdatePath(true);
-            if (objectPoses == null || objectPoses.Length == 0) return;
-            _objectPoses = new System.Collections.Generic.List<ObjectPose>(objectPoses);
-        }
 
         private static LineData _instance = null;
         public static LineData instance
@@ -431,9 +418,10 @@ namespace PluginMaster
                 else segmentPoints = (BezierPath.GetBezierPoints(segment.points, segment.scales)).ToArray();
                 AddSegmentPoints(_pathPoints, segmentPoints);
                 if (segmentPoints.Length == 0) continue;
-                AddSegmentPoints(_midpoints, GetLineMidpoints(segmentPoints));
+                var midpoints = GetLineMidpoints(segmentPoints);
+                AddSegmentPoints(_midpoints, midpoints);
             }
-
+            var objSet = objectSet;
             for (int i = 0; i < _pathPoints.Count; ++i)
             {
                 float distance = 10000f;
@@ -443,7 +431,7 @@ namespace PluginMaster
                     var onSurfacePoint = _pathPoints[i];
                     if (PWBIO.MouseRaycast(ray, out RaycastHit hit, out GameObject collider, distance * 2, -1,
                         paintOnPalettePrefabs: false, castOnMeshesWithoutCollider: true,
-                        tags: null, terrainLayers: null, exceptions: objects))
+                        tags: null, terrainLayers: null, exceptions: objSet, sameOriginAsRay: false, origin: _pathPoints[i]))
                     {
                         onSurfacePoint = hit.point;
                     }
@@ -541,8 +529,8 @@ namespace PluginMaster
         private static LineData _lineData = LineData.instance;
         private static bool _selectingLinePoints = false;
         private static Rect _selectionRect = new Rect();
-        private static System.Collections.Generic.List<GameObject> _disabledObjects
-            = new System.Collections.Generic.List<GameObject>();
+        private static System.Collections.Generic.HashSet<GameObject> _disabledObjects
+            = new System.Collections.Generic.HashSet<GameObject>();
         private static bool _editingPersistentLine = false;
         private static LineData _initialPersistentLineData = null;
         private static LineData _selectedPersistentLineData = null;
@@ -570,7 +558,8 @@ namespace PluginMaster
                 void Save()
                 {
                     if (UnityEditor.SceneView.lastActiveSceneView != null)
-                        LineStrokePreview(UnityEditor.SceneView.lastActiveSceneView, _lineData, false, true);
+                        LineStrokePreview(UnityEditor.SceneView.lastActiveSceneView, _lineData,
+                            persistent: false, forceUpdate: true, initialIdx: 0);
                     CreateLine();
                 }
                 AskIfWantToSave(_lineData.state, Save);
@@ -686,7 +675,7 @@ namespace PluginMaster
 
         private static void RotateLineAround(int idx, Quaternion rotation, LineData lineData)
         {
-            var pivotPosition =  lineData.GetPoint(idx);
+            var pivotPosition = lineData.GetPoint(idx);
             for (int i = 0; i < lineData.pointsCount; ++i)
             {
                 if (i == idx) continue;
@@ -886,8 +875,7 @@ namespace PluginMaster
             DrawSelectionRectangle();
             foreach (var lineData in persistentLines)
             {
-                lineData.UpdateObjects();
-                if (lineData.objectCount == 0)
+                if (lineData.isEmpty())
                 {
                     LineManager.instance.RemovePersistentItem(lineData.id);
                     continue;
@@ -928,6 +916,7 @@ namespace PluginMaster
                         someLinesWereEdited = true;
                         delta = localDelta;
                         editedData = lineData;
+                        _persistentItemWasEdited = true;
                     }
                 }
             }
@@ -954,7 +943,7 @@ namespace PluginMaster
                     if (lineData != editedData) lineData.AddDeltaToSelection(delta);
                     lineData.UpdatePath();
                     PreviewPersistentLine(lineData);
-                    LineStrokePreview(sceneView, lineData, true, true);
+                    LineStrokePreview(sceneView, lineData, persistent: true, forceUpdate: true, _firstNewObjIdx);
                 }
                 PWBCore.SetSavePending();
                 return;
@@ -964,40 +953,48 @@ namespace PluginMaster
             if (!ToolManager.editMode) return;
 
             if (LineManager.editModeType == LineManager.EditModeType.NODES) SelectionRectangleInput(clickOnAnyPoint);
-
-            if ((!someLinesWereEdited && linesEdited.Length <= 1)
-                && _editingPersistentLine && _selectedPersistentLineData != null)
+            
+            bool skipPreview = _selectedPersistentLineData != null
+                && _selectedPersistentLineData.objectCount > PWBCore.staticData.maxPreviewCountInEditMode;
+            if (!skipPreview)
             {
-                var forceStrokeUpdate = updateStroke;
-                if (updateStroke)
+                if ((!someLinesWereEdited && linesEdited.Length <= 1)
+                    && _editingPersistentLine && _selectedPersistentLineData != null)
                 {
-                    _selectedPersistentLineData.UpdatePath();
-                    PreviewPersistentLine(_selectedPersistentLineData);
-                    updateStroke = false;
-                    PWBCore.SetSavePending();
-                }
-                if (_brushstroke != null && !BrushstrokeManager.BrushstrokeEqual(BrushstrokeManager.brushstroke, _brushstroke))
-                    _paintStroke.Clear();
+                    var forceStrokeUpdate = updateStroke;
+                    if (updateStroke)
+                    {
+                        _selectedPersistentLineData.UpdatePath();
+                        PreviewPersistentLine(_selectedPersistentLineData);
+                        updateStroke = false;
+                        PWBCore.SetSavePending();
+                    }
+                    if (_brushstroke != null
+                        && !BrushstrokeManager.BrushstrokeEqual(BrushstrokeManager.brushstroke, _brushstroke))
+                        _paintStroke.Clear();
 
-                LineStrokePreview(sceneView, _selectedPersistentLineData, true, forceStrokeUpdate);
+                    LineStrokePreview(sceneView, _selectedPersistentLineData,
+                        persistent: true, forceStrokeUpdate, _firstNewObjIdx);
+                }
             }
-            LineInput(true, sceneView);
+            LineInput(true, sceneView, skipPreview);
         }
 
+        private static int _firstNewObjIdx = 0;
         private static void PreviewPersistentLine(LineData lineData)
         {
             PWBCore.UpdateTempCollidersIfHierarchyChanged();
 
-            Vector3[] objPos = null;
+            (Vector3, int)[] objPos = null;
             var objList = lineData.objectList;
             Vector3[] strokePos = null;
             var settings = lineData.settings;
             BrushstrokeManager.UpdatePersistentLineBrushstroke(lineData.pathPoints,
-                settings, objList, out objPos, out strokePos);
-            _disabledObjects.AddRange(lineData.objects.ToList());
+                settings, objList, out objPos, out strokePos, out _firstNewObjIdx);
+            _disabledObjects.UnionWith(lineData.objects);
             float pathLength = 0;
             var prevSegmentDir = Vector3.zero;
-
+            
             BrushSettings brushSettings = PaletteManager.GetBrushById(lineData.initialBrushId);
             if (brushSettings == null && PaletteManager.selectedBrush != null)
             {
@@ -1006,13 +1003,19 @@ namespace PluginMaster
             }
             if (settings.overwriteBrushProperties) brushSettings = settings.brushSettings;
             if (brushSettings == null) brushSettings = new BrushSettings();
-            var objArray = objList.ToArray();
-            for (int objIdx = 0; objIdx < objPos.Length; ++objIdx)
+            var objSet = lineData.objectSet;
+            float maxSurfaceHeight = 0f;
+            for (int i = 0; i < objPos.Length; ++i)
             {
+                var objIdx = objPos[i].Item2;
                 var obj = objList[objIdx];
-
+                if (obj == null)
+                {
+                    lineData.RemovePose(objIdx);
+                    continue;
+                }
                 obj.SetActive(true);
-                if (objIdx > 0) pathLength += (objPos[objIdx] - objPos[objIdx - 1]).magnitude;
+                if (i > 0) pathLength += (objPos[i].Item1 - objPos[i - 1].Item1).magnitude;
 
                 var bounds = BoundsUtils.GetBoundsRecursive(obj.transform, obj.transform.rotation, true,
                     BoundsUtils.ObjectProperty.BOUNDING_BOX, true, true);
@@ -1020,28 +1023,28 @@ namespace PluginMaster
                 var size = bounds.size;
                 var pivotToCenter = Vector3.Scale(obj.transform.InverseTransformPoint(bounds.center),
                     obj.transform.lossyScale);
-                var height = Mathf.Max(size.x, size.y, size.z) * 2;
+                var height = size.x + size.y + size.z + maxSurfaceHeight;
                 Vector3 segmentDir = Vector3.zero;
                 var objOnLineSize = AxesUtils.GetAxisValue(size, settings.axisOrientedAlongTheLine);
                 if (settings.objectsOrientedAlongTheLine && objPos.Length > 1)
                 {
-                    if (objIdx < objPos.Length - 1)
+                    if (i < objPos.Length - 1)
                     {
-                        if (objIdx + 1 < objPos.Length) segmentDir = objPos[objIdx + 1] - objPos[objIdx];
-                        else if (strokePos.Length > 0) segmentDir = strokePos[0] - objPos[objIdx];
+                        if (i + 1 < objPos.Length) segmentDir = objPos[i + 1].Item1 - objPos[i].Item1;
+                        else if (strokePos.Length > 0) segmentDir = strokePos[0] - objPos[i].Item1;
                         prevSegmentDir = segmentDir;
                     }
                     else
                     {
-                        var nearestPathPoint = LineData.NearestPathPoint(objPos[objIdx],
+                        var nearestPathPoint = LineData.NearestPathPoint(objPos[i].Item1,
                             objOnLineSize, lineData.pathPoints, out int nearestPointIdx);
-                        segmentDir = nearestPathPoint - objPos[objIdx];
+                        segmentDir = nearestPathPoint - objPos[i].Item1;
                         segmentDir = segmentDir.normalized * prevSegmentDir.magnitude;
                     }
                 }
 
-                if (objPos.Length == 1) segmentDir = lineData.lastPathPoint - objPos[0];
-                else if (objIdx == objPos.Length - 1)
+                if (objPos.Length == 1) segmentDir = lineData.lastPathPoint - objPos[0].Item1;
+                else if (i == objPos.Length - 1)
                 {
                     var onLineSize = objOnLineSize + settings.gapSize;
                     var segmentSize = segmentDir.magnitude;
@@ -1061,16 +1064,20 @@ namespace PluginMaster
                 var lookAt = Quaternion.LookRotation((Vector3)(AxesUtils.SignedAxis)
                     (settings.axisOrientedAlongTheLine), Vector3.up);
                 if (segmentDir != Vector3.zero) itemRotation = Quaternion.LookRotation(segmentDir, normal) * lookAt;
-                var itemPosition = objPos[objIdx];
+                var itemPosition = objPos[i].Item1;
                 var ray = new Ray(itemPosition + normal * height, -normal);
                 if (settings.mode != PaintOnSurfaceToolSettingsBase.PaintMode.ON_SHAPE)
                 {
-                    if (MouseRaycast(ray, out RaycastHit itemHit, out GameObject collider, float.MaxValue, -1,
-                        settings.paintOnPalettePrefabs, settings.paintOnMeshesWithoutCollider,
-                        tags: null, terrainLayers: null, exceptions: objArray))
+                    if (MouseRaycast(ray, out RaycastHit itemHit, out GameObject collider, maxDistance: float.MaxValue,
+                        layerMask: -1, settings.paintOnPalettePrefabs, settings.paintOnMeshesWithoutCollider,
+                        tags: null, terrainLayers: null, exceptions: objSet, sameOriginAsRay: false, origin: itemPosition))
                     {
                         itemPosition = itemHit.point;
                         if (settings.perpendicularToTheSurface) normal = itemHit.normal;
+                        var surfObj = PWBCore.GetGameObjectFromTempCollider(collider);
+                        var surfSize = BoundsUtils.GetBounds(surfObj.transform).size;
+                        var h = surfSize.x + surfSize.y + surfSize.z;
+                        maxSurfaceHeight = Mathf.Max(h, maxSurfaceHeight);
                     }
                     else if (settings.mode == PaintOnSurfaceToolSettingsBase.PaintMode.ON_SURFACE) continue;
                 }
@@ -1121,10 +1128,9 @@ namespace PluginMaster
                 UnityEditor.Undo.RecordObject(obj.transform, LineData.COMMAND_NAME);
                 obj.transform.SetPositionAndRotation(itemPosition, itemRotation);
                 _disabledObjects.Remove(obj);
-                lineData.lastTangentPos = objPos[objIdx];
+                lineData.lastTangentPos = objPos[i].Item1;
             }
-            _disabledObjects = _disabledObjects.Where(i => i != null).ToList();
-            foreach (var obj in _disabledObjects) obj.SetActive(false);
+            foreach (var obj in _disabledObjects) if(obj != null) obj.SetActive(false);
         }
 
         private static void ResetSelectedPersistentLine()
@@ -1140,6 +1146,8 @@ namespace PluginMaster
 
         private static void ApplySelectedPersistentLine(bool deselectPoint)
         {
+            if (!_persistentItemWasEdited) return;
+            _persistentItemWasEdited = false;
             if (!ApplySelectedPersistentObject(deselectPoint, ref _editingPersistentLine, ref _initialPersistentLineData,
                 ref _selectedPersistentLineData, LineManager.instance)) return;
             if (_initialPersistentLineData == null) return;
@@ -1246,9 +1254,10 @@ namespace PluginMaster
         private static void CreateLine()
         {
             var nextLineId = LineData.nextHexId;
-            var objDic = Paint(LineManager.settings, PAINT_CMD, addTempCollider:true,
-                persistent: false, toolObjectId:nextLineId);
+            var objDic = Paint(LineManager.settings, PAINT_CMD, addTempCollider: true,
+                persistent: false, toolObjectId: nextLineId);
             if (objDic.Count != 1) return;
+           
             var scenePath = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path;
             var sceneGUID = UnityEditor.AssetDatabase.AssetPathToGUID(scenePath);
             var initialBrushId = PaletteManager.selectedBrush != null ? PaletteManager.selectedBrush.id : -1;
@@ -1256,7 +1265,7 @@ namespace PluginMaster
             var persistentData = new LineData(objs, initialBrushId, _lineData);
             LineManager.instance.AddPersistentItem(sceneGUID, persistentData);
         }
-        private static void LineInput(bool persistent, UnityEditor.SceneView sceneView)
+        private static void LineInput(bool persistent, UnityEditor.SceneView sceneView, bool skipPreview)
         {
             var lineData = persistent ? _selectedPersistentLineData : _lineData;
             if (lineData == null) return;
@@ -1264,6 +1273,12 @@ namespace PluginMaster
             {
                 if (persistent)
                 {
+                    if (skipPreview)
+                    {
+                        PreviewPersistentLine(_selectedPersistentLineData);
+                        LineStrokePreview(sceneView, _selectedPersistentLineData,
+                            persistent: true, forceUpdate: true, _firstNewObjIdx);
+                    }
                     DeleteDisabledObjects();
                     ApplySelectedPersistentLine(true);
                     ToolProperties.SetProfile(new ToolProperties.ProfileData(LineManager.instance, _createProfileName));
@@ -1298,7 +1313,7 @@ namespace PluginMaster
                     if (persistent)
                     {
                         PreviewPersistentLine(_selectedPersistentLineData);
-                        LineStrokePreview(sceneView, lineData, true, true);
+                        LineStrokePreview(sceneView, lineData, persistent: true, forceUpdate: true, _firstNewObjIdx);
                     }
                     else updateStroke = true;
                 }
@@ -1352,10 +1367,10 @@ namespace PluginMaster
                 BrushstrokeManager.UpdateLineBrushstroke(pathPoints);
                 updateStroke = false;
             }
-            LineStrokePreview(sceneView, _lineData, false, forceStrokeUpdate);
+            LineStrokePreview(sceneView, _lineData, persistent: false, forceStrokeUpdate, 0);
             DrawLine(_lineData);
             DrawSelectionRectangle();
-            LineInput(false, sceneView);
+            LineInput(false, sceneView, false);
 
             if (selectingLinePoints && !Event.current.control)
             {
@@ -1369,7 +1384,7 @@ namespace PluginMaster
             SelectionRectangleInput(clickOnPoint);
         }
         private static void LineStrokePreview(UnityEditor.SceneView sceneView,
-            LineData lineData, bool persistent, bool forceUpdate)
+            LineData lineData, bool persistent, bool forceUpdate, int initialIdx)
         {
             var settings = lineData.settings;
             var lastPoint = lineData.lastPathPoint;
@@ -1382,6 +1397,8 @@ namespace PluginMaster
             PWBCore.UpdateTempCollidersIfHierarchyChanged();
 
             if (!persistent) _paintStroke.Clear();
+            var idx = initialIdx;
+            float maxSurfaceHeight = 0f;
             for (int i = 0; i < brushstroke.Length; ++i)
             {
                 var strokeItem = brushstroke[i];
@@ -1395,7 +1412,7 @@ namespace PluginMaster
                 var pivotToCenter = Vector3.Scale(
                     prefab.transform.InverseTransformDirection(bounds.center - prefab.transform.position),
                     brushSettings.scaleMultiplier);
-                var height = Mathf.Max(size.x, size.y, size.z) * 2;
+                var height = size.x + size.y + size.z + maxSurfaceHeight;
                 Vector3 segmentDir = Vector3.zero;
 
                 if (settings.objectsOrientedAlongTheLine && brushstroke.Length > 1)
@@ -1438,13 +1455,18 @@ namespace PluginMaster
                 if (settings.mode != PaintOnSurfaceToolSettingsBase.PaintMode.ON_SHAPE)
                 {
                     if (MouseRaycast(ray, out RaycastHit itemHit,
-                        out GameObject collider, float.MaxValue, -1,
-                        settings.paintOnPalettePrefabs, settings.paintOnMeshesWithoutCollider))
+                        out GameObject collider, float.MaxValue, layerMask:  -1,
+                        settings.paintOnPalettePrefabs, settings.paintOnMeshesWithoutCollider,
+                        sameOriginAsRay: false, origin: itemPosition))
                     {
                         itemPosition = itemHit.point;
                         if (settings.perpendicularToTheSurface) normal = itemHit.normal;
                         var colObj = PWBCore.GetGameObjectFromTempCollider(collider);
                         if (colObj != null) surface = colObj.transform;
+                        var surfObj = PWBCore.GetGameObjectFromTempCollider(collider);
+                        var surfSize = BoundsUtils.GetBounds(surfObj.transform).size;
+                        var h = surfSize.x + surfSize.y + surfSize.z;
+                        maxSurfaceHeight = Mathf.Max(h, maxSurfaceHeight);
                     }
                     else if (settings.mode == PaintOnSurfaceToolSettingsBase.PaintMode.ON_SURFACE) continue;
                 }
@@ -1497,7 +1519,7 @@ namespace PluginMaster
 
                 Transform parentTransform = settings.parent;
                 var paintItem = new PaintStrokeItem(prefab, itemPosition, itemRotation,
-                    itemScale, layer, parentTransform, surface, strokeItem.flipX, strokeItem.flipY);
+                    itemScale, layer, parentTransform, surface, strokeItem.flipX, strokeItem.flipY, idx++);
                 paintItem.persistentParentId = persistent ? lineData.hexId : LineData.nextHexId;
                 _paintStroke.Add(paintItem);
                 PreviewBrushItem(prefab, rootToWorld, layer, sceneView.camera,

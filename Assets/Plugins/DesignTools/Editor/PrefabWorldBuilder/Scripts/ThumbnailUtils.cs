@@ -458,16 +458,19 @@ namespace PluginMaster
         public static void DeleteUnusedThumbnails()
         {
             var palettes = PaletteManager.paletteData;
-            bool GetBrushIdAndItemIdFromThumbnailPath(string thumbnailPath, out long brushId, out long itemId)
+            bool CheckThumbnailPath(string thumbnailPath)
             {
                 var fileName = System.IO.Path.GetFileNameWithoutExtension(thumbnailPath);
                 var ids = fileName.Split('_');
-                brushId = long.Parse(ids[0], System.Globalization.NumberStyles.HexNumber);
-                itemId = -1;
+                if (ids.Length > 2) return false;
+                long itemId = -1;
+                long brushId = -1;
+                var provider = new System.Globalization.CultureInfo("en-US");
+                if (!long.TryParse(ids[0], System.Globalization.NumberStyles.HexNumber, provider, out brushId)) return false;
                 var brush = PaletteManager.GetBrushById(brushId);
                 if (brush == null) return false;
                 if (ids.Length == 1) return true;
-                itemId = long.Parse(ids[1], System.Globalization.NumberStyles.HexNumber);
+                if (!long.TryParse(ids[1], System.Globalization.NumberStyles.HexNumber, provider, out itemId)) return false;
                 return brush.ItemExist(itemId);
             }
 
@@ -477,7 +480,7 @@ namespace PluginMaster
                 var thumbnailPaths = System.IO.Directory.GetFiles(folderPath, "*.png");
                 foreach (var thumbnailPath in thumbnailPaths)
                 {
-                    if (!GetBrushIdAndItemIdFromThumbnailPath(thumbnailPath, out long pathBrushId, out long pathItemId))
+                    if (!CheckThumbnailPath(thumbnailPath))
                     {
                         System.IO.File.Delete(thumbnailPath);
                         var metapath = thumbnailPath + ".meta";

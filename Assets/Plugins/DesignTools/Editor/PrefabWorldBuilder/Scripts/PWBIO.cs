@@ -187,6 +187,7 @@ namespace PluginMaster
                         case ToolManager.PaintTool.SHAPE:
                         case ToolManager.PaintTool.TILING:
                             ToolManager.editMode = !ToolManager.editMode;
+                            _persistentItemWasEdited = false;
                             ToolProperties.RepainWindow();
                             break;
                         default: break;
@@ -597,13 +598,14 @@ namespace PluginMaster
             return true;
         }
 
+        static bool _persistentItemWasEdited = false;
         #endregion
 
         #region OCTREE
         private const float MIN_OCTREE_NODE_SIZE = 0.5f;
         private static PointOctree<GameObject> _octree = new PointOctree<GameObject>(10, Vector3.zero, MIN_OCTREE_NODE_SIZE);
-        private static System.Collections.Generic.List<GameObject> _paintedObjects
-            = new System.Collections.Generic.List<GameObject>();
+        private static System.Collections.Generic.HashSet<GameObject> _paintedObjects
+            = new System.Collections.Generic.HashSet<GameObject>();
         public static PointOctree<GameObject> octree
         {
             get
@@ -627,7 +629,7 @@ namespace PluginMaster
 #endif
             _octree = null;
             _paintedObjects.Clear();
-            var allPrefabsPaths = new System.Collections.Generic.List<string>();
+            var allPrefabsPaths = new System.Collections.Generic.HashSet<string>();
             bool AddPrefabPath(MultibrushItemSettings item)
             {
                 if (item.prefab == null) return false;
@@ -704,6 +706,7 @@ namespace PluginMaster
             public readonly int layer = 0;
             public readonly bool flipX = false;
             public readonly bool flipY = false;
+            public readonly int index = 0;
             private Transform _parent = null;
             private string _persistentParentId = string.Empty;
 
@@ -713,7 +716,7 @@ namespace PluginMaster
             public string persistentParentId { get => _persistentParentId; set => _persistentParentId = value; }
             public Transform surface { get => _surface; set => _surface = value; }
             public PaintStrokeItem(GameObject prefab, Vector3 position, Quaternion rotation,
-                Vector3 scale, int layer, Transform parent, Transform surface, bool flipX, bool flipY)
+                Vector3 scale, int layer, Transform parent, Transform surface, bool flipX, bool flipY, int index = -1)
             {
                 this.prefab = prefab;
                 this.position = position;
@@ -722,6 +725,7 @@ namespace PluginMaster
                 this.layer = layer;
                 this.flipX = flipX;
                 this.flipY = flipY;
+                this.index = index;
                 _parent = parent;
                 _surface = surface;
             }
@@ -946,13 +950,13 @@ namespace PluginMaster
         }
         public static bool painting { get; set; }
         private const string PAINT_CMD = "Paint";
-        private static System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<GameObject>>
+        private static System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<(GameObject, int)>>
             Paint(IPaintToolSettings settings, string commandName = PAINT_CMD,
             bool addTempCollider = true, bool persistent = false, string toolObjectId = "")
         {
             painting = true;
             var paintedObjects = new System.Collections.Generic.Dictionary<string,
-                System.Collections.Generic.List<GameObject>>();
+                System.Collections.Generic.List<(GameObject, int)>>();
             if (_paintStroke.Count == 0)
             {
                 if (BrushstrokeManager.brushstroke.Length == 0) BrushstrokeManager.UpdateBrushstroke();
@@ -975,8 +979,8 @@ namespace PluginMaster
                 item.parent = GetParent(settings, item.prefab.name, true, item.surface, persistentParentId);
                 if (addTempCollider) PWBCore.AddTempCollider(obj);
                 if (!paintedObjects.ContainsKey(persistentParentId))
-                    paintedObjects.Add(persistentParentId, new System.Collections.Generic.List<GameObject>());
-                paintedObjects[persistentParentId].Add(obj);
+                    paintedObjects.Add(persistentParentId, new System.Collections.Generic.List<(GameObject, int)>());
+                paintedObjects[persistentParentId].Add((obj, item.index));
                 var spriteRenderers = obj.GetComponentsInChildren<SpriteRenderer>();
 
                 foreach (var spriteRenderer in spriteRenderers)
@@ -1158,7 +1162,8 @@ namespace PluginMaster
         public static bool MouseRaycast(Ray mouseRay, out RaycastHit mouseHit,
             out GameObject collider, float maxDistance, LayerMask layerMask,
             bool paintOnPalettePrefabs, bool castOnMeshesWithoutCollider, string[] tags = null,
-            TerrainLayer[] terrainLayers = null, GameObject[] exceptions = null)
+            TerrainLayer[] terrainLayers = null, System.Collections.Generic.HashSet<GameObject> exceptions = null,
+            bool sameOriginAsRay = true, Vector3 origin = new Vector3())
         {
             bool IsTempCollider(GameObject obj)
             {
@@ -1183,7 +1188,7 @@ namespace PluginMaster
             bool ExceptionFilterPassed(GameObject obj)
             {
                 if (exceptions == null) return true;
-                if (exceptions.Length == 0) return true;
+                if (exceptions.Count == 0) return true;
                 return !exceptions.Contains(obj);
             }
 
@@ -1265,9 +1270,11 @@ namespace PluginMaster
             {
                 nearbyObjects = octree.GetNearby(mouseRay, 1f).Where(o => o != null).ToArray();
                 if (MeshUtils.Raycast(mouseRay, out RaycastHit meshHit, out GameObject meshCollider,
-                    nearbyObjects, maxDistance))
+                    nearbyObjects, maxDistance, sameOriginAsRay, origin))
                 {
-                    if (!validHit || meshHit.distance < mouseHit.distance)
+                    var meshHitDistance = sameOriginAsRay ? meshHit.distance : (meshHit.point - origin).magnitude;
+                    var mouseHitDistance = sameOriginAsRay ? mouseHit.distance : (mouseHit.point - origin).magnitude;
+                    if (!validHit || meshHitDistance < mouseHitDistance)
                     {
                         mouseHit = meshHit;
                         collider = meshCollider;
@@ -1285,15 +1292,38 @@ namespace PluginMaster
                     return true;
                 }
             }
-            var hitDictionary = Physics.RaycastAll(mouseRay, maxDistance, layerMask, QueryTriggerInteraction.Ignore)
-                .ToDictionary(hit => hit.collider.gameObject, hit => hit);
+            var hits = Physics.RaycastAll(mouseRay, maxDistance, layerMask, QueryTriggerInteraction.Ignore);
+            var hitDictionary = new System.Collections.Generic.Dictionary<GameObject, RaycastHit>();
+            foreach (var hit in hits)
+            {
+                var obj = hit.collider.gameObject;
+                if (!hitDictionary.ContainsKey(obj)) hitDictionary.Add(obj, hit);
+                else
+                {
+                    var hitDistance = sameOriginAsRay ? hit.distance: (hit.point - origin).magnitude;
+                    var dicDistance = sameOriginAsRay ? hitDictionary[obj].distance 
+                        : (hitDictionary[obj].point - origin).magnitude;
+                    if (hitDistance < dicDistance) hitDictionary[obj] = hit;
+                }
+            }
             if (castOnMeshesWithoutCollider)
             {
                 if (MeshUtils.RaycastAll(mouseRay, out RaycastHit[] hitArray, out GameObject[] colliders,
                     nearbyObjects, maxDistance))
                 {
                     for (int i = 0; i < hitArray.Length; ++i)
-                        if (!hitDictionary.ContainsKey(colliders[i])) hitDictionary.Add(colliders[i], hitArray[i]);
+                    {
+                        var obj = colliders[i];
+                        var hit = hitArray[i];
+                        if (!hitDictionary.ContainsKey(obj)) hitDictionary.Add(obj, hit);
+                        else
+                        {
+                            var hitDistance = sameOriginAsRay ? hit.distance : (hit.point - origin).magnitude;
+                            var dicDistance = sameOriginAsRay ? hitDictionary[obj].distance
+                                : (hitDictionary[obj].point - origin).magnitude;
+                            if (hitDistance < dicDistance) hitDictionary[obj] = hit;
+                        }
+                    }
                 }
             }
             if (collider != null && hitDictionary.ContainsKey(collider)) hitDictionary.Remove(collider);
@@ -1302,7 +1332,7 @@ namespace PluginMaster
             validHit = false;
             foreach (var hitPair in hitDictionary)
             {
-                var hitDistance = hitPair.Value.distance;
+                var hitDistance = sameOriginAsRay ? hitPair.Value.distance : (hitPair.Value.point - origin).magnitude;
                 var hitCollider = GetOriginalCollider(hitPair.Key);
                 if (!AllFiltersPassed(ref hitCollider, mouseHit.point)) continue;
                 if (hitDistance < minDistance)
@@ -1318,7 +1348,7 @@ namespace PluginMaster
         
         public static float GetBottomDistanceToSurface(Vector3[] bottomVertices, Matrix4x4 TRS,
             float bottomMagnitude, bool paintOnPalettePrefabs, bool castOnMeshesWithoutCollider,
-            out Transform surface, GameObject[] exceptions = null)
+            out Transform surface, System.Collections.Generic.HashSet<GameObject> exceptions = null)
         {
             surface = null;
             var positiveDistance = float.MaxValue;
@@ -1724,31 +1754,6 @@ namespace PluginMaster
             ToolManager.tool = ToolManager.tool == tool ? ToolManager.PaintTool.NONE : tool;
             PWBToolbar.RepaintWindow();
         }
-        /*private static void ToolbarInput()
-        {
-            if(PWBSettings.shortcuts.toolbarPinToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.PIN);
-            else if (PWBSettings.shortcuts.toolbarBrushToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.BRUSH);
-            else if (PWBSettings.shortcuts.toolbarGravityToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.GRAVITY);
-            else if (PWBSettings.shortcuts.toolbarLineToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.LINE);
-            else if (PWBSettings.shortcuts.toolbarShapeToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.SHAPE);
-            else if (PWBSettings.shortcuts.toolbarTilingToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.TILING);
-            else if (PWBSettings.shortcuts.toolbarReplacerToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.REPLACER);
-            else if (PWBSettings.shortcuts.toolbarEraserToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.ERASER);
-            else if (PWBSettings.shortcuts.toolbarSelectionToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.SELECTION);
-            else if (PWBSettings.shortcuts.toolbarExtrudeToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.EXTRUDE);
-            else if (PWBSettings.shortcuts.toolbarMirrorToggle.combination.Check())
-                ToogleTool(ToolManager.PaintTool.MIRROR);
-        }*/
         #endregion
     }
 }

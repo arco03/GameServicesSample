@@ -16,16 +16,16 @@ using UnityEngine;
 
 namespace PluginMaster
 {
-    public class BrushstrokeItem : System.IEquatable<BrushstrokeItem>
+    public struct BrushstrokeItem : System.IEquatable<BrushstrokeItem>
     {
-        public readonly MultibrushItemSettings settings = null;
-        public Vector3 tangentPosition = Vector3.zero;
-        public readonly Vector3 additionalAngle = Vector3.zero;
-        public readonly Vector3 scaleMultiplier = Vector3.zero;
-        public Vector3 nextTangentPosition = Vector3.zero;
-        public readonly bool flipX = false;
-        public readonly bool flipY = false;
-        public readonly float surfaceDistance = 0f;
+        public readonly MultibrushItemSettings settings;
+        public Vector3 tangentPosition;
+        public readonly Vector3 additionalAngle;
+        public readonly Vector3 scaleMultiplier;
+        public Vector3 nextTangentPosition;
+        public readonly bool flipX;
+        public readonly bool flipY;
+        public readonly float surfaceDistance;
 
         public BrushstrokeItem(MultibrushItemSettings settings, Vector3 tangentPosition,
             Vector3 additionalAngle, Vector3 scaleMultiplier, bool flipX, bool flipY, float surfaceDistance)
@@ -133,22 +133,31 @@ namespace PluginMaster
                 ? brushSettings.randomSurfaceDistanceRange.randomValue : brushSettings.surfaceDistance;
             var strokeItem = new BrushstrokeItem(PaletteManager.selectedBrush.items[index],
                 tangentPosition, additonalAngle, scale, flipX, flipY, surfaceDistance);
-            if (_brushstroke.Count > 0) _brushstroke.Last().nextTangentPosition = tangentPosition;
+            if (_brushstroke.Count > 0)
+            {
+                var last = _brushstroke.Last();
+                last.nextTangentPosition = tangentPosition;
+                _brushstroke[_brushstroke.Count - 1] = last;
+            }
             _brushstroke.Add(strokeItem);
         }
 
         private static Vector3 Scale(int itemIdx, IPaintToolSettings settings)
         {
-            var nextItem = PaletteManager.selectedBrush.items[itemIdx];
             if (settings.overwriteBrushProperties)
                 return settings.brushSettings.randomScaleMultiplier
                     ? settings.brushSettings.randomScaleMultiplierRange.randomVector
                     : settings.brushSettings.scaleMultiplier;
-            else
+            else if(PaletteManager.selectedBrush != null )
+            {
+                var nextItem = PaletteManager.selectedBrush.items[itemIdx];
                 return nextItem.randomScaleMultiplier
                    ? nextItem.randomScaleMultiplierRange.randomVector : nextItem.scaleMultiplier;
+            }
+            else return settings.brushSettings.scaleMultiplier;
         }
 
+        public static float _minLineSpacing = float.MaxValue;
         public static float GetLineSpacing(int itemIdx, LineSettings settings, Vector3 scale)
         {
             float spacing = 0;
@@ -168,6 +177,7 @@ namespace PluginMaster
                 if (spacing <= 0.0001) spacing = 0.5f;
             }
             spacing += settings.gapSize;
+            _minLineSpacing = Mathf.Min(spacing, _minLineSpacing);
             return spacing;
         }
         private static void UpdateLineBrushstroke(Vector3[] points, LineSettings settings)
@@ -188,7 +198,6 @@ namespace PluginMaster
 
             float length = 0f;
             int segment = 0;
-            float minSpace = lineLength / 1024f;
             if (PaletteManager.selectedBrush.patternMachine != null)
                 PaletteManager.selectedBrush.patternMachine.Reset();
             var prefabSpacingDictionary = new System.Collections.Generic.Dictionary<(int, Vector3), float>();
@@ -265,9 +274,9 @@ namespace PluginMaster
                 var scale = Scale(nextIdx, LineManager.settings);
                 float spacing = Spacing(nextIdx, scale);
 
-                var delta = Mathf.Max(spacing, minSpace);
+                var delta = Mathf.Max(spacing, _minLineSpacing);
                 if (delta <= 0) break;
-                spacing = Mathf.Max(spacing, minSpace);
+                spacing = Mathf.Max(spacing, _minLineSpacing);
                 if (!useEndIndexes && brush.frequencyMode == MultibrushSettings.FrecuencyMode.PATTERN
                     && endLenght > 0 && length + spacing > lineLength - endLenght && currentEndIdx == 0)
                 {
@@ -292,7 +301,6 @@ namespace PluginMaster
             if (settings.spacingType == LineSettings.SpacingType.BOUNDS && transform != null)
             {
                 var bounds = BoundsUtils.GetBoundsRecursive(transform, transform.rotation, false);
-
                 var size = bounds.size;
                 var axis = settings.axisOrientedAlongTheLine;
                 if (Utils2D.Is2DAsset(transform.gameObject) && UnityEditor.SceneView.currentDrawingSceneView != null
@@ -302,15 +310,17 @@ namespace PluginMaster
                 if (spacing <= 0.0001) spacing = 0.5f;
             }
             spacing += settings.gapSize;
+            _minLineSpacing = Mathf.Min(spacing, _minLineSpacing);
             return spacing;
         }
 
         public static void UpdatePersistentLineBrushstroke(Vector3[] pathPoints,
             LineSettings settings, System.Collections.Generic.List<GameObject> lineObjects,
-            out Vector3[] objPositions, out Vector3[] strokePositions)
+            out (Vector3, int)[] objPositions, out Vector3[] strokePositions, out int firstNewObjectIdx)
         {
             _brushstroke.Clear();
-            var objPositionsList = new System.Collections.Generic.List<Vector3>();
+            firstNewObjectIdx = 0;
+            var objPositionsList = new System.Collections.Generic.List<(Vector3, int)>();
             var strokePositionsList = new System.Collections.Generic.List<Vector3>();
             float lineLength = 0f;
             var lengthFromFirstPoint = new float[pathPoints.Length];
@@ -325,7 +335,6 @@ namespace PluginMaster
 
             float length = 0f;
             int segment = 0;
-            float minSpace = lineLength / 1024f;
             if (PaletteManager.selectedBrush != null)
                 if (PaletteManager.selectedBrush.patternMachine != null)
                     PaletteManager.selectedBrush.patternMachine.Reset();
@@ -334,18 +343,47 @@ namespace PluginMaster
             var prefabSpacingDictionary = new System.Collections.Generic.Dictionary<(int, Vector3), float>();
 
             var brush = PaletteManager.selectedBrush;
-            /* int endingObjectCount = 0;
             float endLenght = 0f;
+            int BeginningObjectCount = lineObjects.Count;
+            int endingObjectCount = 0;
             if (brush != null && brush.frequencyMode == MultibrushSettings.FrecuencyMode.PATTERN)
             {
                 var endIndexes = brush.patternMachine.GetEndIndexes();
                 endingObjectCount = Mathf.Min(endIndexes.Length, lineObjects.Count);
-                for(int i = 0; i < endingObjectCount; ++i)
+                BeginningObjectCount = lineObjects.Count - endingObjectCount;
+                for (int i = 0; i < endingObjectCount; ++i)
                 {
                     var obj = lineObjects[lineObjects.Count - 1 - i];
                     endLenght += GetLineSpacing(obj.transform, settings);
                 }
-            } */
+                endLenght = Mathf.Min(endLenght, lineLength);
+            }
+            var itemCount = 0;
+            float newItemSpacing(int itemIdx, Vector3 scale)
+            {
+                if (PaletteManager.selectedBrush == null)
+                {
+                    if (Mathf.Approximately(_minLineSpacing, float.MaxValue)) return 0f;
+                    return _minLineSpacing;
+                }
+                var item = PaletteManager.selectedBrush.items[itemIdx];
+                var key = (itemIdx, scale);
+                if (settings.spacingType == LineSettings.SpacingType.BOUNDS && itemIdx >= 0)
+                {
+                    if (item.randomScaleMultiplier) return GetLineSpacing(itemIdx, settings, scale);
+                    else if (prefabSpacingDictionary.ContainsKey(key)) return prefabSpacingDictionary[key];
+                    else
+                    {
+                        var spacing = GetLineSpacing(itemIdx, settings, scale);
+                        prefabSpacingDictionary.Add(key, spacing);
+                        return spacing;
+                    }
+                }
+                else return GetLineSpacing(itemIdx, settings, scale);
+            }
+
+            var prevAtTheEnd = false;
+            bool firstNewObjectAdded = false;
             do
             {
                 var nextIdx = PaletteManager.selectedBrush != null ? PaletteManager.selectedBrush.nextItemIndex : -1;
@@ -361,30 +399,27 @@ namespace PluginMaster
                 var distance = length - lengthFromFirstPoint[segment];
 
                 var position = pathPoints[segment] + segmentDirection * distance;
+                var itemScale = Scale(nextIdx, LineManager.settings);
+                var itemSpacing = newItemSpacing(nextIdx, itemScale);
 
-                var objectExist = objIdx < lineObjects.Count;
+                var isAtTheEnd = lineLength - length - itemSpacing <= endLenght;
+                if (objIdx < lineObjects.Count && isAtTheEnd && !prevAtTheEnd)
+                    objIdx = lineObjects.Count - endingObjectCount;
+                prevAtTheEnd = isAtTheEnd;
+                var addExistingObject = objIdx < lineObjects.Count && (itemCount < BeginningObjectCount || isAtTheEnd);
+                if (addExistingObject && lineObjects[objIdx] == null) addExistingObject = false;
                 float spacing = 0;
                 var scale = Vector3.one;
-                if (objectExist) spacing = GetLineSpacing(lineObjects[objIdx].transform, settings);
+
+                if (addExistingObject) spacing = GetLineSpacing(lineObjects[objIdx].transform, settings);
                 else if (PaletteManager.selectedBrush != null)
                 {
-                    var item = PaletteManager.selectedBrush.items[nextIdx];
-                    scale = Scale(nextIdx, LineManager.settings);
-                    var key = (nextIdx, scale);
-                    if (settings.spacingType == LineSettings.SpacingType.BOUNDS && nextIdx >= 0)
-                    {
-                        if (item.randomScaleMultiplier) spacing = GetLineSpacing(nextIdx, settings, scale);
-                        else if (prefabSpacingDictionary.ContainsKey(key)) spacing = prefabSpacingDictionary[key];
-                        else
-                        {
-                            spacing = GetLineSpacing(nextIdx, settings, scale);
-                            prefabSpacingDictionary.Add(key, spacing);
-                        }
-                    }
-                    else spacing = GetLineSpacing(nextIdx, settings, scale);
+                    scale = itemScale;
+                    spacing = itemSpacing;
                 }
                 if (spacing == 0) break;
-                spacing = Mathf.Max(spacing, minSpace);
+                spacing = Mathf.Max(spacing, _minLineSpacing);
+
                 int nearestPathointIdx;
                 var intersection = LineData.NearestPathPoint(position, spacing, pathPoints, out nearestPathointIdx);
                 if (nearestPathointIdx > segment)
@@ -392,17 +427,25 @@ namespace PluginMaster
                         + (intersection - pathPoints[nearestPathointIdx]).magnitude;
                 length += spacing;
                 if (lineLength - length < THRESHOLD) break;
-                if (objectExist)
+                if (addExistingObject)
                 {
+                    objPositionsList.Add((position, objIdx));
                     ++objIdx;
-                    objPositionsList.Add(position);
+                    if (isAtTheEnd && objIdx >= lineObjects.Count) break;
                 }
                 else if (PaletteManager.selectedBrush == null) break;
                 else
                 {
                     AddBrushstrokeItem(nextIdx, position, angle: Vector3.zero, scale, LineManager.settings);
                     strokePositionsList.Add(position);
+                    if(!firstNewObjectAdded)
+                    {
+                        firstNewObjectAdded = true;
+                        firstNewObjectIdx = itemCount;
+                    }
+
                 }
+                ++itemCount;
 
             } while (lineLength - length > THRESHOLD);
             objPositions = objPositionsList.ToArray();
@@ -447,7 +490,6 @@ namespace PluginMaster
                 var lineLength = startToEnd.magnitude;
                 float itemsSize = 0f;
                 var items = new System.Collections.Generic.List<(int idx, float size)>();
-                var minspacing = (lineLength * points.Count) / 1024f;
 
                 do
                 {
@@ -462,7 +504,7 @@ namespace PluginMaster
                         itemSize = GetLineSpacing(nextIdx, settings, scale);
                         prefabSpacingDictionary.Add(key, itemSize);
                     }
-                    itemSize = Mathf.Max(itemSize, minspacing);
+                    itemSize = Mathf.Max(itemSize, _minLineSpacing);
                     if (itemsSize + itemSize > lineLength) break;
                     itemsSize += itemSize;
                     items.Add((nextIdx, itemSize));
@@ -802,6 +844,7 @@ namespace PluginMaster
             _brushstroke.Clear();
             var objPositionsList = new System.Collections.Generic.List<Vector3>();
             var strokePositionsList = new System.Collections.Generic.List<Vector3>();
+
             for (int i = 0; i < cellCenters.Length; ++i)
             {
                 var objectExist = i < tilingObjects.Count;
@@ -884,7 +927,7 @@ namespace PluginMaster
                 float col0x = -delta * halfSize;
                 float row0y = -delta * halfSize;
 
-                var takedCells = new System.Collections.Generic.List<(int row, int col)>();
+                var takedCells = new System.Collections.Generic.HashSet<(int row, int col)>();
 
                 for (int row = 0; row < size; ++row)
                 {
@@ -902,7 +945,7 @@ namespace PluginMaster
                             var randRow = Mathf.RoundToInt((y - row0y) / delta);
                             if (randRow < row) continue;
                             if (row != randRow || col != randRow) takedCells.Add((randRow, randCol));
-                            takedCells.RemoveAll(pair => pair.row <= row);
+                            takedCells.RemoveWhere(pair => pair.row <= row);
                         }
 
                         if (brushSettings.brushShape == BrushToolBase.BrushShape.CIRCLE)

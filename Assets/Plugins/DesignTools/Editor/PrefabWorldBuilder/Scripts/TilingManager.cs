@@ -236,7 +236,7 @@ namespace PluginMaster
             = new System.Collections.Generic.List<Vector3>();
         public System.Collections.Generic.List<Vector3> tilingCenters => _tilingCenters;
         public TilingData() : base() { }
-        public TilingData(GameObject[] objects, long initialBrushId, TilingData tilingData)
+        public TilingData((GameObject, int)[] objects, long initialBrushId, TilingData tilingData)
         : base(objects, initialBrushId, tilingData) { }
 
         private static TilingData _instance = null;
@@ -388,7 +388,6 @@ namespace PluginMaster
                     break;
             }
         }
-
         private static void TilingToolEditMode(UnityEditor.SceneView sceneView)
         {
             var persistentItems = TilingManager.instance.GetPersistentItems();
@@ -397,8 +396,7 @@ namespace PluginMaster
             bool selectedItemWasEdited = false;
             foreach (var itemData in persistentItems)
             {
-                itemData.UpdateObjects();
-                if (itemData.objectCount == 0)
+                if (itemData.isEmpty())
                 {
                     TilingManager.instance.RemovePersistentItem(itemData.id);
                     continue;
@@ -431,6 +429,7 @@ namespace PluginMaster
                     {
                         _editingPersistentTiling = true;
                         selectedItemWasEdited = true;
+                        _persistentItemWasEdited = true;
                     }
                 }
             }
@@ -443,25 +442,35 @@ namespace PluginMaster
                 }
             }
             if (!ToolManager.editMode) return;
-            if (selectedItemWasEdited) PreviewPersistentTiling(_selectedPersistentTilingData);
-            else if (_editingPersistentTiling && _selectedPersistentTilingData != null)
+            bool skipPreview = _selectedPersistentTilingData != null
+                && _selectedPersistentTilingData.objectCount > PWBCore.staticData.maxPreviewCountInEditMode;
+            if (!skipPreview)
             {
-                var forceStrokeUpdate = updateStroke;
-                if (updateStroke)
+                if (selectedItemWasEdited) PreviewPersistentTiling(_selectedPersistentTilingData);
+                else if (_editingPersistentTiling && _selectedPersistentTilingData != null)
                 {
-                    PreviewPersistentTiling(_selectedPersistentTilingData);
-                    updateStroke = false;
-                    PWBCore.SetSavePending();
+                    var forceStrokeUpdate = updateStroke;
+                    if (updateStroke)
+                    {
+                        PreviewPersistentTiling(_selectedPersistentTilingData);
+                        updateStroke = false;
+                        PWBCore.SetSavePending();
+                    }
+                    if (_brushstroke != null
+                        && !BrushstrokeManager.BrushstrokeEqual(BrushstrokeManager.brushstroke, _brushstroke))
+                        _paintStroke.Clear();
+                    TilingStrokePreview(sceneView.camera, _selectedPersistentTilingData.hexId, forceStrokeUpdate);
                 }
-                if (_brushstroke != null
-                    && !BrushstrokeManager.BrushstrokeEqual(BrushstrokeManager.brushstroke, _brushstroke))
-                    _paintStroke.Clear();
-                TilingStrokePreview(sceneView.camera, _selectedPersistentTilingData.hexId, forceStrokeUpdate);
             }
-
             if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Return)
             {
-                ApplySelectedPersistentTiling(true);
+                if (skipPreview)
+                {
+                    PreviewPersistentTiling(_selectedPersistentTilingData);
+                    TilingStrokePreview(sceneView.camera, _selectedPersistentTilingData.hexId, forceUpdate: true);
+                }
+                ApplySelectedPersistentTiling(deselectPoint: true);
+
                 ToolProperties.SetProfile(new ToolProperties.ProfileData(TilingManager.instance, _createProfileName));
                 ToolProperties.RepainWindow();
             }
@@ -492,11 +501,16 @@ namespace PluginMaster
             BrushstrokeManager.UpdatePersistentTilingBrushstroke(data.tilingCenters.ToArray(),
                 settings, objList, out objPos, out Vector3[] strokePos);
             _disabledObjects.Clear();
-            _disabledObjects.AddRange(data.objects.ToList());
-            var objArray = objList.ToArray();
+            _disabledObjects.UnionWith(objList);
+            var objSet = data.objectSet;
             for (int objIdx = 0; objIdx < objPos.Length; ++objIdx)
             {
                 var obj = objList[objIdx];
+                if (obj == null)
+                {
+                    data.RemovePose(objIdx);
+                    continue;
+                }
                 obj.SetActive(true);
 
                 Bounds bounds = BoundsUtils.GetBoundsRecursive(obj.transform, obj.transform.rotation);
@@ -511,7 +525,7 @@ namespace PluginMaster
                     if (MouseRaycast(ray, out RaycastHit itemHit,
                         out GameObject collider, height * 2f, -1,
                         settings.paintOnPalettePrefabs, settings.paintOnMeshesWithoutCollider,
-                        tags: null, terrainLayers: null, exceptions:objArray))
+                        tags: null, terrainLayers: null, exceptions: objSet))
                     {
                         itemPosition = itemHit.point;
                         normal = itemHit.normal;
@@ -579,17 +593,19 @@ namespace PluginMaster
                 obj.transform.position = itemPosition;
                 _disabledObjects.Remove(obj);
             }
-            _disabledObjects = _disabledObjects.Where(i => i != null).ToList();
-            foreach (var obj in _disabledObjects) obj.SetActive(false);
+            foreach (var obj in _disabledObjects) if(obj != null) obj.SetActive(false);
         }
 
         private static void ApplySelectedPersistentTiling(bool deselectPoint)
         {
+            if (!_persistentItemWasEdited) return;
+            _persistentItemWasEdited = false;
             if (!ApplySelectedPersistentObject(deselectPoint, ref _editingPersistentTiling, ref _initialPersistentTilingData,
                 ref _selectedPersistentTilingData, TilingManager.instance)) return;
             if (_initialPersistentTilingData == null) return;
             var selectedTiling = TilingManager.instance.GetItem(_initialPersistentTilingData.id);
             _initialPersistentTilingData = selectedTiling.Clone();
+
         }
         private static void TilingStateNone(bool in2DMode)
         {
@@ -712,7 +728,7 @@ namespace PluginMaster
             UpdateCellCenters(data, false);
             return true;
         }
-       
+
         public static void UpdateCellSize()
         {
             if (ToolManager.editMode)
@@ -805,9 +821,9 @@ namespace PluginMaster
             if (data.selectedPointIdx == 8)
             {
                 var prevRotation = data.settings.rotation;
-                wasEdited = SetTilingRotation(data,
+                wasEdited = wasEdited || SetTilingRotation(data,
                     UnityEditor.Handles.RotationHandle(data.settings.rotation, data.GetPoint(8)));
-                if(prevRotation != data.settings.rotation) ToolProperties.RepainWindow();
+                if (prevRotation != data.settings.rotation) ToolProperties.RepainWindow();
             }
             return clickOnPoint || wasEdited;
         }
@@ -963,7 +979,6 @@ namespace PluginMaster
             PWBCore.UpdateTempCollidersIfHierarchyChanged();
             _paintStroke.Clear();
             var settings = TilingManager.settings;
-
             for (int i = 0; i < brushstroke.Length; ++i)
             {
                 var strokeItem = brushstroke[i];
@@ -1040,8 +1055,8 @@ namespace PluginMaster
                     itemPosition -= itemRotation * (pivotToCenter - axisDirection * (size.y / 2));
 
 
-                    if (brushSettings.embedInSurface
-                    && settings.mode != PaintOnSurfaceToolSettingsBase.PaintMode.ON_SHAPE)
+                if (brushSettings.embedInSurface
+                && settings.mode != PaintOnSurfaceToolSettingsBase.PaintMode.ON_SHAPE)
                 {
                     if (brushSettings.embedAtPivotHeight)
                         itemPosition += itemRotation * new Vector3(0f, strokeItem.settings.bottomMagnitude, 0f);
@@ -1068,7 +1083,7 @@ namespace PluginMaster
                 var previewRootToWorld = Matrix4x4.TRS(itemPosition, previewRotation, strokeItem.scaleMultiplier)
                     * Matrix4x4.Rotate(Quaternion.Inverse(prefab.transform.rotation))
                     * Matrix4x4.Translate(-prefab.transform.position);
-                PreviewBrushItem(prefab, previewRootToWorld, layer, camera,false, false, strokeItem.flipX, strokeItem.flipY);
+                PreviewBrushItem(prefab, previewRootToWorld, layer, camera, false, false, strokeItem.flipX, strokeItem.flipY);
                 _previewData.Add(new PreviewData(prefab, previewRootToWorld, layer, strokeItem.flipX, strokeItem.flipY));
             }
         }

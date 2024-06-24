@@ -216,10 +216,16 @@ namespace PluginMaster
             return items.ToArray();
         }
 
+        public void UpdatePersistenObjects()
+        {
+            var persistentItems = GetPersistentItems();
+            foreach (var itemData in persistentItems) itemData.UpdateObjects();
+        }
+
         public bool ReplaceObject(GameObject target, GameObject obj)
         {
             var items = GetPersistentItems();
-            foreach(var item in items)
+            foreach (var item in items)
                 if (item.ReplaceObject(target, obj)) return true;
             return false;
         }
@@ -232,7 +238,7 @@ namespace PluginMaster
         public void DeletePersistentItem(long itemId, bool deleteObjects)
         {
             ToolProperties.RegisterUndo("Delete Item");
-            var parents = new System.Collections.Generic.List<GameObject>();
+            var parents = new System.Collections.Generic.HashSet<GameObject>();
             foreach (var item in _staticSceneItems)
             {
                 var itemParents = item.GetParents(itemId);
@@ -260,8 +266,10 @@ namespace PluginMaster
         {
             var splittedId = hexItemId.Split('_');
             if (splittedId.Length != 2) return null;
-            var itemId = long.Parse(splittedId[1], System.Globalization.NumberStyles.AllowHexSpecifier);
-            return GetItem(itemId);
+            var provider = new System.Globalization.CultureInfo("en-US");
+            if (long.TryParse(splittedId[1], System.Globalization.NumberStyles.AllowHexSpecifier, provider, out long itemId))
+                return GetItem(itemId);
+            return null;
         }
 
         public bool showPreexistingElements
@@ -989,7 +997,7 @@ namespace PluginMaster
     }
 
     [System.Serializable]
-    public class ObjectId : System.IEquatable<ObjectId>
+    public struct ObjectId : System.IEquatable<ObjectId>
     {
         [SerializeField] private int _instanceId;
         [SerializeField] private string _globalObjId;
@@ -1035,61 +1043,44 @@ namespace PluginMaster
 
         public static GameObject FindObject(ObjectId objId)
         {
-            var obj = UnityEditor.EditorUtility.InstanceIDToObject(objId.instanceId) as GameObject;
-            if (obj == null)
+            var obj = UnityEditor.EditorUtility.InstanceIDToObject(objId.instanceId);
+            GameObject gameObj = null;
+            if (obj != null) gameObj = obj as GameObject;
+            if (gameObj == null)
             {
                 if (UnityEditor.GlobalObjectId.TryParse(objId.globalObjId, out UnityEditor.GlobalObjectId id))
                 {
-                    obj = UnityEditor.GlobalObjectId.GlobalObjectIdentifierToObjectSlow(id) as GameObject;
-                    if (obj != null) objId.instanceId = obj.GetInstanceID();
+                    gameObj = UnityEditor.GlobalObjectId.GlobalObjectIdentifierToObjectSlow(id) as GameObject;
+                    if (gameObj != null) objId.instanceId = gameObj.GetInstanceID();
                 }
             }
-            return obj;
+            return gameObj;
         }
     }
 
     [System.Serializable]
-    public class ObjectPose
+    public struct ObjectPose
     {
-        [SerializeField] private ObjectId _id = null;
         [SerializeField] private Vector3 _position;
         [SerializeField] private Quaternion _localRotation;
         [SerializeField] private Vector3 _localScale;
-        private GameObject _object = null;
 
-        public ObjectPose(ObjectId id, Vector3 position, Quaternion localRotation, Vector3 localScale)
+        public ObjectPose(Vector3 position, Quaternion localRotation, Vector3 localScale)
         {
-            _id = id;
             _position = position;
             _localRotation = localRotation;
             _localScale = localScale;
-            _object = ObjectId.FindObject(_id);
         }
 
-
-        public ObjectId id
+        public ObjectPose(GameObject obj)
         {
-            get => _id;
-            set
-            {
-                if (_id == value) return;
-                _id = value;
-                _object = ObjectId.FindObject(_id);
-            }
-        }
-
-        public GameObject obj
-        {
-            get
-            {
-                if (_object == null) _object = ObjectId.FindObject(_id);
-                return _object;
-            }
+            _position = obj.transform.position;
+            _localRotation = obj.transform.localRotation;
+            _localScale = obj.transform.localScale;
         }
         public Vector3 position { get => _position; set => _position = value; }
         public Quaternion localRotation { get => _localRotation; set => _localRotation = value; }
         public Vector3 localScale { get => _localScale; set => _localScale = value; }
-        public ObjectPose Clone() => new ObjectPose(_id, _position, _localRotation, _localScale);
         public void Copy(ObjectPose other)
         {
             _position = other._position;
@@ -1097,6 +1088,7 @@ namespace PluginMaster
             _localScale = other._localScale;
         }
     }
+
 
     public interface IToolName { string value { get; } }
     [System.Serializable]
@@ -1117,71 +1109,163 @@ namespace PluginMaster
         #endregion
         #region OBJECT POSES
         [SerializeField]
-        protected System.Collections.Generic.List<ObjectPose> _objectPoses
-            = new System.Collections.Generic.List<ObjectPose>();
+        private System.Collections.Generic.List<ObjectPose> _poses = new System.Collections.Generic.List<ObjectPose>();
+        [SerializeField]
+        private System.Collections.Generic.List<ObjectId> _objectIds = new System.Collections.Generic.List<ObjectId>();
+        private System.Collections.Generic.List<GameObject> _objects = new System.Collections.Generic.List<GameObject>();
+
+
+        private void FindObjects()
+        {
+            if (_objectIds.Count == _objects.Count) return;
+            var ids = _objectIds.ToArray();
+            var poses = _poses.ToArray();
+            _objectIds.Clear();
+            _poses.Clear();
+            _objects.Clear();
+            for (int i = 0; i < ids.Length; ++i)
+            {
+                var obj = ObjectId.FindObject(ids[i]);
+                if (obj == null) continue;
+                _objectIds.Add(ids[i]);
+                _objects.Add(obj);
+                _poses.Add(new ObjectPose(obj));
+            }
+        }
+
+        public void AddPose(ObjectId objId, ObjectPose pose)
+        {
+            var obj = ObjectId.FindObject(objId);
+            if (obj == null) return;
+            _poses.Add(pose);
+            _objectIds.Add(objId);
+            _objects.Add(obj);
+        }
+        public void InitializePoses((ObjectId, ObjectPose)[] items)
+        {
+            _poses.Clear();
+            _objectIds.Clear();
+            _objects.Clear();
+            foreach (var item in items) AddPose(item.Item1, item.Item2);
+        }
+        public void InsertPose(int index, ObjectPose pose, ObjectId objId)
+        {
+            var obj = ObjectId.FindObject(objId);
+            if (obj == null) return;
+            _poses.Insert(index, pose);
+            _objectIds.Insert(index, objId);
+            _objects.Insert(index, obj);
+        }
+
+        public void RemovePose(int index)
+        {
+            _poses.RemoveAt(index);
+            _objectIds.RemoveAt(index);
+            _objects.RemoveAt(index);
+        }
+
+        public void RemoveAllPoses()
+        {
+            _poses.Clear();
+            _objectIds.Clear();
+            _objects.Clear();
+        }
+
         public void UpdateObjects()
         {
-            var objPos = _objectPoses.ToArray();
-            foreach (var item in objPos)
+            for (int i = 0; i < objectCount; ++i)
             {
-                var obj = item.obj;
-                if (obj == null) _objectPoses.Remove(item);
+                var obj = _objects[i];
+                if (obj == null) RemovePose(i);
             }
         }
 
         public void UpdatePoses()
         {
-            var objPos = _objectPoses.ToArray();
-            foreach (var item in objPos)
+            if(_objectIds.Count != _objects.Count)
             {
-                var obj = item.obj;
-                if (obj == null)
-                {
-                    _objectPoses.Remove(item);
-                    continue;
-                }
-                item.position = obj.transform.position;
-                item.localRotation = obj.transform.localRotation;
-                item.localScale = obj.transform.localScale;
+                FindObjects();
+                return;
+            }
+            var objCount = _objectIds.Count;
+            var ids = _objectIds.ToArray();
+            var poses = _poses.ToArray();
+            var objs = _objects.ToArray();
+            _objectIds.Clear();
+            _poses.Clear();
+            _objects.Clear();
+            for (int i = 0; i < objCount; ++i)
+            {
+                var obj = objs[i];
+                if (obj == null) continue;
+                AddPose(new ObjectId(obj), new ObjectPose(obj));
             }
         }
 
-        public void AddObjects(GameObject[] objects)
+        public void AddObjects((GameObject, int)[] objects)
         {
             for (int i = 0; i < objects.Length; ++i)
-                _objectPoses.Add(new ObjectPose(new ObjectId(objects[i]),
-                    objects[i].transform.position, objects[i].transform.localRotation, objects[i].transform.localScale));
+            {
+                var idx = objects[i].Item2;
+                var obj = objects[i].Item1;
+                if (idx > -1 && idx < objectCount)
+                    InsertPose(idx, new ObjectPose(obj.transform.position, obj.transform.localRotation,
+                        obj.transform.localScale), new ObjectId(obj));
+                else AddPose(new ObjectId(obj),
+                    new ObjectPose(obj.transform.position, obj.transform.localRotation, obj.transform.localScale));
+            }
         }
 
         public bool ReplaceObject(GameObject target, GameObject obj)
         {
             int targetIdx = -1;
             var targetId = new ObjectId(target);
-            for (int i = 0; i < _objectPoses.Count; ++i)
+            for (int i = 0; i < objectCount; ++i)
             {
-                var objId = _objectPoses[i].id;
-                if(targetId == objId)
+                var objId = _objectIds[i];
+                if (targetId == objId)
                 {
                     targetIdx = i;
                     break;
                 }
             }
             if (targetIdx == -1) return false;
-            _objectPoses.Insert(targetIdx, new ObjectPose(new ObjectId(obj),
-                    obj.transform.position, obj.transform.localRotation, obj.transform.localScale));
-            _objectPoses.RemoveAt(targetIdx + 1);
+            InsertPose(targetIdx, new ObjectPose(obj.transform.position, obj.transform.localRotation,
+                obj.transform.localScale), new ObjectId(obj));
+            RemovePose(targetIdx + 1);
             return true;
         }
 
-        public int objectCount => _objectPoses.Count;
-        public ObjectPose[] objectPoses => _objectPoses.ToArray();
+        public int objectCount
+        {
+            get
+            {
+                if (_objectIds.Count != _objects.Count) FindObjects();
+                return _objects.Count;
+            }
+        }
+        public bool isEmpty()
+        {
+            if (_objectIds.Count == 0) return true;
+            var allObjectsAreNull =_objects.Count > 0 && !_objects.Exists(i => i != null);
+            return allObjectsAreNull;
+        }
+
         public GameObject[] objects
         {
             get
             {
-                var objs = new System.Collections.Generic.List<GameObject>();
-                foreach (var item in _objectPoses) objs.Add(item.obj);
-                return objs.ToArray();
+                if (_objectIds.Count != _objects.Count) FindObjects();
+                return _objects.ToArray();
+            }
+        }
+
+        public System.Collections.Generic.HashSet<GameObject> objectSet
+        {
+            get
+            {
+                if (_objectIds.Count != _objects.Count) FindObjects();
+                return new System.Collections.Generic.HashSet<GameObject>(_objects);
             }
         }
 
@@ -1189,42 +1273,30 @@ namespace PluginMaster
         {
             get
             {
-                var list = new System.Collections.Generic.List<GameObject>();
-                var objPos = _objectPoses.ToArray();
-                _objectPoses.Clear();
-                for (int i = 0; i < objPos.Length; ++i)
-                {
-                    var item = objPos[i];
-                    if (item == null) continue;
-                    var obj = item.obj;
-                    if (obj == null) continue;
-                    _objectPoses.Add(item);
-                    list.Add(obj);
-                }
-                return list;
+                if (_objectIds.Count != _objects.Count) FindObjects();
+                return _objects.ToList();
             }
         }
 
-        public void Delete()
+        public void DestroyGameObjects()
         {
-            var objList = objectList;
-            foreach (var obj in objectList) UnityEditor.Undo.DestroyObjectImmediate(obj);
+            foreach (var obj in objectList) if (obj != null) UnityEditor.Undo.DestroyObjectImmediate(obj);
         }
 
         public virtual void ResetPoses(PersistentData<TOOL_NAME, TOOL_SETTINGS, CONTROL_POINT> initialData)
         {
-            var initialPoses = initialData.objectPoses;
-            foreach (var initialPose in initialPoses)
+            var initialPoses = initialData._poses;
+            for (int i = 0; i < objectCount; ++i)
             {
-                var pose = _objectPoses.Find(p => p.id == initialPose.id);
-                if (pose == null) continue;
-                pose.Copy(initialPose);
-                if (pose.obj == null) continue;
-                UnityEditor.Undo.RecordObject(pose.obj.transform, RESET_COMMAND_NAME);
-                pose.obj.transform.position = pose.position;
-                pose.obj.transform.localRotation = pose.localRotation;
-                pose.obj.transform.localScale = pose.localScale;
-                pose.obj.SetActive(true);
+                var obj = objects[i];
+                if (obj == null) obj = ObjectId.FindObject(_objectIds[i]);
+                if (obj == null) continue;
+                var pose = _poses[i];
+                UnityEditor.Undo.RecordObject(obj.transform, RESET_COMMAND_NAME);
+                obj.transform.position = pose.position;
+                obj.transform.localRotation = pose.localRotation;
+                obj.transform.localScale = pose.localScale;
+                obj.SetActive(true);
             }
             Copy(initialData);
         }
@@ -1232,6 +1304,7 @@ namespace PluginMaster
         public GameObject GetParent()
         {
             var parents = new System.Collections.Generic.List<GameObject>();
+            if (_objectIds.Count != _objects.Count) FindObjects();
             var objList = objectList;
             void GetParentList()
             {
@@ -1288,20 +1361,20 @@ namespace PluginMaster
         public Vector3 selectedPoint => _pointPositions[_selectedPointIdx];
         public bool IsSelected(int idx) => _selection.Contains(idx);
         public int selectionCount => _selection.Count;
-        public virtual void SetPoint(int idx, Vector3 value, bool registerUndo, bool selectAll, bool moveSelection = true)
+        public virtual bool SetPoint(int idx, Vector3 value, bool registerUndo, bool selectAll, bool moveSelection = true)
         {
             if (_pointPositions.Length <= 1) Initialize();
-            if (idx < 0 || idx >= _pointPositions.Length) return;
-            if (_pointPositions[idx] == value) return;
+            if (idx < 0 || idx >= _pointPositions.Length) return false;
+            if (_pointPositions[idx] == value) return false;
             if (registerUndo) ToolProperties.RegisterUndo(COMMAND_NAME);
             var delta = value - _pointPositions[idx];
             _pointPositions[idx] = _controlPoints[idx].position = value;
             var selection = _selection.ToArray();
-            if (!moveSelection) return;
-            if(selectAll)
+            if (!moveSelection) return true;
+            if (selectAll)
             {
                 selection = new int[_controlPoints.Count];
-                for(int i = 0; i < selection.Length; ++i) selection[i] = i;
+                for (int i = 0; i < selection.Length; ++i) selection[i] = i;
             }
             foreach (var selectedIdx in selection)
             {
@@ -1309,6 +1382,7 @@ namespace PluginMaster
                 _controlPoints[selectedIdx].position += delta;
                 _pointPositions[selectedIdx] = _controlPoints[selectedIdx].position;
             }
+            return true;
         }
 
         public void AddDeltaToSelection(Vector3 delta)
@@ -1431,7 +1505,7 @@ namespace PluginMaster
         [SerializeField] protected long _initialBrushId = -1;
 
         public PersistentData() => Initialize();
-        public PersistentData(GameObject[] objects, long initialBrushId,
+        public PersistentData((GameObject, int)[] objects, long initialBrushId,
             PersistentData<TOOL_NAME, TOOL_SETTINGS, CONTROL_POINT> data)
         {
             Copy(data);
@@ -1444,7 +1518,9 @@ namespace PluginMaster
             _selection.Clear();
             _state = ToolManager.ToolState.PERSISTENT;
             if (objects == null || objects.Length == 0) return;
-            _objectPoses = new System.Collections.Generic.List<ObjectPose>();
+            _poses = new System.Collections.Generic.List<ObjectPose>();
+            _objectIds = new System.Collections.Generic.List<ObjectId>();
+            _objects = new System.Collections.Generic.List<GameObject>();
             AddObjects(objects);
         }
 
@@ -1463,9 +1539,9 @@ namespace PluginMaster
                 clone._controlPoints.Add(pointClone);
             }
             clone._pointPositions = _pointPositions == null ? null : _pointPositions.ToArray();
-
-            clone._objectPoses = new System.Collections.Generic.List<ObjectPose>();
-            foreach (var objPos in _objectPoses) clone._objectPoses.Add(objPos.Clone());
+            clone._poses = _poses.ToList();
+            clone._objectIds = _objectIds.ToList();
+            clone._objects = _objects.ToList();
             clone._initialBrushId = _initialBrushId;
             _settings.Clone(clone._settings);
 
@@ -1486,8 +1562,9 @@ namespace PluginMaster
             _pointPositions = other._pointPositions == null ? null : other._pointPositions.ToArray();
 
             _settings = other._settings;
-            _objectPoses = new System.Collections.Generic.List<ObjectPose>();
-            foreach (var objPos in other._objectPoses) _objectPoses.Add(objPos.Clone());
+            _poses = _poses.ToList();
+            _objectIds = _objectIds.ToList();
+            _objects = _objects.ToList();
             _initialBrushId = other._initialBrushId;
         }
 
@@ -1532,14 +1609,14 @@ namespace PluginMaster
         {
             var item = GetItem(itemId);
             if (item == null) return;
-            if (deleteObjects) item.Delete();
+            if (deleteObjects) item.DestroyGameObjects();
             RemoveItemData(itemId);
         }
         public TOOL_DATA GetItem(long itemId) => _items.Find(i => i.id == itemId);
 
         public GameObject[] GetParents(long itemId)
         {
-            var parents = new System.Collections.Generic.List<GameObject>();
+            var parents = new System.Collections.Generic.HashSet<GameObject>();
             var item = GetItem(itemId);
             if (item == null) return parents.ToArray();
             var objs = item.objects;

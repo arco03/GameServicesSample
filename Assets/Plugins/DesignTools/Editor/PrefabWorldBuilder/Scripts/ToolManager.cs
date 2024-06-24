@@ -144,6 +144,7 @@ namespace PluginMaster
                         BrushstrokeManager.UpdateBrushstroke();
                     PWBIO.ResetAutoParent();
                 }
+
                 ToolProperties.RepainWindow();
                 if (BrushProperties.instance != null) BrushProperties.instance.Repaint();
                 if (UnityEditor.SceneView.sceneViews.Count > 0) ((UnityEditor.SceneView)

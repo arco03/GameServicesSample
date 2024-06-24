@@ -281,7 +281,8 @@ namespace PluginMaster
                 var TRS = Matrix4x4.TRS(itemPosition, itemRotation, itemScale);
                 var bottomDistanceToSurfce = GetBottomDistanceToSurface(strokeItem.settings.bottomVertices,
                     TRS, Mathf.Abs(strokeItem.settings.bottomMagnitude), paintOnPalettePrefabs: true,
-                    castOnMeshesWithoutCollider: true, out _replaceSurface, new GameObject[] { target.gameObject });
+                    castOnMeshesWithoutCollider: true, out _replaceSurface,
+                    new System.Collections.Generic.HashSet<GameObject> { target.gameObject });
                 itemPosition += itemRotation * new Vector3(0f, -bottomDistanceToSurfce, 0f);
             }
             else

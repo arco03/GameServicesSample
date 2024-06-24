@@ -63,7 +63,7 @@ namespace PluginMaster
                 filterList = new System.Collections.Generic.List<GameObject>(objects.Except(exclude));
                 objects = new System.Collections.Generic.HashSet<GameObject>(filterList);
             }
-            if(excludeColliders)
+            if (excludeColliders)
             {
 #if UNITY_2022_2_OR_NEWER
                 var colliders = GameObject.FindObjectsByType<Collider>(FindObjectsSortMode.None);
@@ -81,7 +81,8 @@ namespace PluginMaster
 
         private static System.Reflection.MethodInfo intersectRayMesh = null;
         public static bool Raycast(Ray ray, out RaycastHit hitInfo,
-            out GameObject collider, GameObject[] filters, float maxDistance)
+            out GameObject collider, GameObject[] filters, float maxDistance,
+            bool sameOriginAsRay = true, Vector3 origin = new Vector3())
         {
             collider = null;
             hitInfo = new RaycastHit();
@@ -111,18 +112,28 @@ namespace PluginMaster
                 var parameters = new object[] { ray, mesh, filter.transform.localToWorldMatrix, null };
                 if ((bool)intersectRayMesh.Invoke(null, parameters))
                 {
-                    if (hitInfo.distance > maxDistance) continue;
+                    if (sameOriginAsRay)
+                    {
+                        if (hitInfo.distance > maxDistance) continue;
+                    }
+                    else
+                    {
+                        var hitInfoDistance = (hitInfo.point - origin).magnitude;
+                        if (hitInfoDistance > maxDistance) continue;
+                    }
                     result = true;
                     var hit = (RaycastHit)parameters[3];
-                    if (hit.distance < minDistance)
+                    var hitDistance = hit.distance;
+                    if (!sameOriginAsRay) hitDistance = (hit.point - origin).magnitude;                    
+                    if (hitDistance < minDistance)
                     {
                         collider = filter;
-                        minDistance = hit.distance;
+                        minDistance = hitDistance;
                         hitInfo = hit;
                     }
                 }
             }
-            if(result)
+            if (result)
             {
                 hitInfo.normal = hitInfo.normal.normalized;
             }
@@ -130,7 +141,7 @@ namespace PluginMaster
         }
 
         public static bool Raycast(Vector3 origin, Vector3 direction,
-            out RaycastHit hitInfo, out GameObject collider, GameObject[]  filters, float maxDistance)
+            out RaycastHit hitInfo, out GameObject collider, GameObject[] filters, float maxDistance)
         {
             var ray = new Ray(origin, direction);
             return Raycast(ray, out hitInfo, out collider, filters, maxDistance);

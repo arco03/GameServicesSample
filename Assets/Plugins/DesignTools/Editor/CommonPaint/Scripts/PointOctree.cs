@@ -596,7 +596,7 @@ namespace PluginMaster
         // Minimum side length that a node can be - essentially an alternative to having a max depth
         readonly float minSize;
 
-        private System.Collections.Generic.List<int> _allObjectIds = new System.Collections.Generic.List<int>();
+        private System.Collections.Generic.HashSet<int> _allObjectIds = new System.Collections.Generic.HashSet<int>();
         public bool Contains(int objId) => _allObjectIds.Contains(objId);
 
         /// <summary>

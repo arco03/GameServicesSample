@@ -1,11 +1,7 @@
 fileFormatVersion: 2
-guid: 6060fc02137664b4a9cea829d1ad0ff7
-MonoImporter:
+guid: 21e7647bf4fe79a4d81126e730fc14f8
+DefaultImporter:
   externalObjects: {}
-  serializedVersion: 2
-  defaultReferences: []
-  executionOrder: 0
-  icon: {instanceID: 0}
   userData: 
   assetBundleName: 
   assetBundleVariant: 
@@ -14,5 +10,6 @@ AssetOrigin:
   productId: 185406
   packageName: Prefab World Builder
   packageVersion: 4.1
-  assetPath: Assets/Plugins/DesignTools/Editor/Common/Scripts/TerrainUtils.cs
+  assetPath: Assets/Plugins/DesignTools/Editor/PrefabWorldBuilder/Documentation/Prefab
+    World Builder Documentation.pdf
   uploadId: 672313

@@ -684,7 +684,7 @@ namespace PluginMaster
 
         public static void SetSelectionOriginPosition() => _setSelectionOriginPosition = true;
         #region VISIBLE POINTS
-        private static int[] GetVisiblePoints(Vector3[] points, Camera camera)
+        private static System.Collections.Generic.HashSet<int> GetVisiblePoints(Vector3[] points, Camera camera)
         {
             var resultSet = new System.Collections.Generic.HashSet<int>(GrahamScan(points));
             if (resultSet.Count == 6)
@@ -696,12 +696,12 @@ namespace PluginMaster
                     ocluded.Add(i);
                 }
                 if ((ocluded[0] / 4 == ocluded[1] / 4) || (ocluded[1] == ocluded[0] + 4))
-                    return resultSet.ToArray();
+                    return resultSet;
                 var nearestIdx = camera.transform.InverseTransformPoint(points[ocluded[0]]).z
                     < camera.transform.InverseTransformPoint(points[ocluded[1]]).z ? ocluded[0] : ocluded[1];
                 resultSet.Add(nearestIdx);
             }
-            return resultSet.ToArray();
+            return resultSet;
         }
         private static int[] GrahamScan(Vector3[] points)
         {

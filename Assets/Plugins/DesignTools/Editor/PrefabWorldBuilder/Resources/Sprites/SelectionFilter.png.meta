@@ -106,6 +106,6 @@ AssetOrigin:
   serializedVersion: 1
   productId: 185406
   packageName: Prefab World Builder
-  packageVersion: 4.0.1
-  assetPath: Assets/PluginMaster/DesignTools/Editor/PrefabWorldBuilder/Resources/Sprites/SelectionFilter.png
-  uploadId: 662342
+  packageVersion: 4.1
+  assetPath: Assets/Plugins/DesignTools/Editor/PrefabWorldBuilder/Resources/Sprites/SelectionFilter.png
+  uploadId: 672313

@@ -12,7 +12,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 using UnityEngine;
-
+using System.Linq;
 namespace PluginMaster
 {
     #region DATA & SETTINGS
@@ -137,7 +137,7 @@ namespace PluginMaster
             {
                 var paintedObjectsDic = Paint(GravityToolManager.settings, PAINT_CMD, false);
                 if (!paintedObjectsDic.ContainsKey(string.Empty)) return;
-                var paintedObjects = paintedObjectsDic[string.Empty].ToArray();
+                var paintedObjects = paintedObjectsDic[string.Empty].Select(i => i.Item1).ToArray();
 
                 var finalPoses = GravityUtils.SimulateGravity(paintedObjects, GravityToolManager.settings.simData, false);
 

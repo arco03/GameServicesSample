@@ -57,6 +57,7 @@ namespace PluginMaster
         private bool _thumbnailsGroupOpen = true;
         private bool _tempCollidersGroupOpen = true;
         private bool _palettesGroupOpen = true;
+        private bool _editModeGroupOpen = true;
 
         private void GeneralSettings()
         {
@@ -94,6 +95,10 @@ namespace PluginMaster
 
             _gravityToolGroupOpen = UnityEditor.EditorGUILayout.BeginFoldoutHeaderGroup(_gravityToolGroupOpen, "Gravity Tool");
             if (_gravityToolGroupOpen) GravityToolGroup();
+            UnityEditor.EditorGUILayout.EndFoldoutHeaderGroup();
+
+            _editModeGroupOpen = UnityEditor.EditorGUILayout.BeginFoldoutHeaderGroup(_editModeGroupOpen, "Edit mode");
+            if (_editModeGroupOpen) EditModeGroup();
             UnityEditor.EditorGUILayout.EndFoldoutHeaderGroup();
 
             _thumbnailsGroupOpen = UnityEditor.EditorGUILayout.BeginFoldoutHeaderGroup(_thumbnailsGroupOpen, "Thumnails");
@@ -190,6 +195,7 @@ namespace PluginMaster
         {
             using (new GUILayout.VerticalScope(UnityEditor.EditorStyles.helpBox))
             {
+                UnityEditor.EditorGUIUtility.labelWidth = 110;
                 PWBCore.staticData.thumbnailLayer = UnityEditor.EditorGUILayout.IntField("Thumbnail Layer:",
                     PWBCore.staticData.thumbnailLayer);
             }
@@ -214,6 +220,18 @@ namespace PluginMaster
                 PWBCore.staticData.tempCollidersAction = (PWBData.TempCollidersAction)
                     UnityEditor.EditorGUILayout.Popup("Action:",
                     (int)PWBCore.staticData.tempCollidersAction, _tempCollidersActionNames);
+            }
+        }
+        private void EditModeGroup()
+        {
+            using (new GUILayout.VerticalScope(UnityEditor.EditorStyles.helpBox))
+            {
+                UnityEditor.EditorGUIUtility.labelWidth = 120;
+                PWBCore.staticData.maxPreviewCountInEditMode
+                    = UnityEditor.EditorGUILayout.IntField(new GUIContent("Max Preview Count:",
+                    "Defines the maximum number of pre-existing objects displayed as preview in Edit Mode." +
+                    "This setting can optimize performance, especially for scenes with numerous objects"),
+                    PWBCore.staticData.maxPreviewCountInEditMode);
             }
         }
         #endregion

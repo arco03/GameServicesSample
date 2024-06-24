@@ -328,6 +328,7 @@ namespace PluginMaster
 
         private void UpdateOnSurfacePoints()
         {
+            var objSet = objectSet;
             Vector3 OnSurface(Vector3 point)
             {
                 var maxDistance = radius * 20;
@@ -337,14 +338,14 @@ namespace PluginMaster
                 if (PWBIO.MouseRaycast(downRay, out downHit, out GameObject cd1,
                     maxDistance, -1,
                     paintOnPalettePrefabs: true, castOnMeshesWithoutCollider: true,
-                    tags: null, terrainLayers: null, exceptions: objects))
+                    tags: null, terrainLayers: null, exceptions: objSet))
                     downDistance = downHit.distance;
                 else
                 {
                     downRay = new Ray(point + normal * maxDistance, -_normal);
                     if (PWBIO.MouseRaycast(downRay, out downHit, out GameObject cd2,
                         maxDistance * 2, -1, paintOnPalettePrefabs: true, castOnMeshesWithoutCollider: true,
-                        tags: null, terrainLayers: null, exceptions: objects))
+                        tags: null, terrainLayers: null, exceptions: objSet))
                         downDistance = downHit.distance;
                 }
                 if (downDistance >= float.MaxValue) return point;
@@ -373,7 +374,7 @@ namespace PluginMaster
         }
         public ShapeData() : base() { }
 
-        public ShapeData(GameObject[] objects, long initialBrushId, ShapeData shapeData)
+        public ShapeData((GameObject, int)[] objects, long initialBrushId, ShapeData shapeData)
             : base(objects, initialBrushId, shapeData) { }
 
         private static ShapeData _instance = null;
@@ -577,7 +578,7 @@ namespace PluginMaster
             if (_selectedPersistentShapeData == null) return;
             _selectedPersistentShapeData.settings.Copy(ShapeManager.settings);
             _selectedPersistentShapeData.Update(false);
-            PreviewPersistenShape(_selectedPersistentShapeData);
+            PreviewPersistentShape(_selectedPersistentShapeData);
         }
 
         public static void ResetShapeState(bool askIfWantToSave = true)
@@ -602,7 +603,7 @@ namespace PluginMaster
             BrushstrokeManager.ClearBrushstroke();
             if (ToolManager.editMode)
             {
-                PreviewPersistenShape(_selectedPersistentShapeData);
+                PreviewPersistentShape(_selectedPersistentShapeData);
                 UnityEditor.SceneView.RepaintAll();
                 repaint = true;
             }
@@ -650,10 +651,11 @@ namespace PluginMaster
         {
             var persistentItems = ShapeManager.instance.GetPersistentItems();
             var selectedItemId = _initialPersistentShapeData == null ? -1 : _initialPersistentShapeData.id;
+            bool skipPreview = _selectedPersistentShapeData != null
+                && _selectedPersistentShapeData.objectCount > PWBCore.staticData.maxPreviewCountInEditMode;
             foreach (var shapeData in persistentItems)
             {
-                shapeData.UpdateObjects();
-                if (shapeData.objectCount == 0)
+                if (shapeData.isEmpty())
                 {
                     ShapeManager.instance.RemovePersistentItem(shapeData.id);
                     continue;
@@ -687,27 +689,37 @@ namespace PluginMaster
                     if (wasEditted)
                     {
                         _editingPersistentShape = true;
-                        PreviewPersistenShape(shapeData);
+                        if (!skipPreview) PreviewPersistentShape(shapeData);
                         PWBCore.SetSavePending();
+                        _persistentItemWasEdited = true;
                     }
                 }
             }
 
             if (!ToolManager.editMode) return;
-
-            if (_editingPersistentShape && _selectedPersistentShapeData != null)
+            
+            if (!skipPreview)
             {
-                var forceStrokeUpdate = updateStroke;
-                if (updateStroke)
+                if (_editingPersistentShape && _selectedPersistentShapeData != null)
                 {
-                    PreviewPersistenShape(_selectedPersistentShapeData);
-                    updateStroke = false;
-                    PWBCore.SetSavePending();
+                    var forceStrokeUpdate = updateStroke;
+                    if (updateStroke)
+                    {
+                        PreviewPersistentShape(_selectedPersistentShapeData);
+                        updateStroke = false;
+                        PWBCore.SetSavePending();
+                    }
+                    ShapeStrokePreview(sceneView, _selectedPersistentShapeData.hexId, forceStrokeUpdate);
                 }
-                ShapeStrokePreview(sceneView, _selectedPersistentShapeData.hexId, forceStrokeUpdate);
             }
+
             if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Return)
             {
+                if (skipPreview)
+                {
+                    PreviewPersistentShape(_selectedPersistentShapeData);
+                    ShapeStrokePreview(sceneView, _selectedPersistentShapeData.hexId, forceUpdate: true);
+                }
                 DeleteDisabledObjects();
                 ApplySelectedPersistentShape(true);
                 ToolProperties.SetProfile(new ToolProperties.ProfileData(ShapeManager.instance, _createProfileName));
@@ -726,14 +738,14 @@ namespace PluginMaster
 
         }
 
-        private static void PreviewPersistenShape(ShapeData shapeData)
+        private static void PreviewPersistentShape(ShapeData shapeData)
         {
             PWBCore.UpdateTempCollidersIfHierarchyChanged();
 
             Pose[] objPoses = null;
             var objList = shapeData.objectList;
             BrushstrokeManager.UpdatePersistentShapeBrushstroke(shapeData, objList, out objPoses);
-            _disabledObjects = objList.ToList();
+            _disabledObjects = new System.Collections.Generic.HashSet<GameObject>(objList);
             var settings = shapeData.settings;
             BrushSettings brushSettings = PaletteManager.GetBrushById(shapeData.initialBrushId);
             if (brushSettings == null && PaletteManager.selectedBrush != null)
@@ -743,7 +755,7 @@ namespace PluginMaster
             }
             if (settings.overwriteBrushProperties) brushSettings = settings.brushSettings;
             if (brushSettings == null) brushSettings = new BrushSettings();
-            var objArray = objList.ToArray();
+            var objSet = shapeData.objectSet;
             for (int objIdx = 0; objIdx < objPoses.Length; ++objIdx)
             {
                 var obj = objList[objIdx];
@@ -765,7 +777,7 @@ namespace PluginMaster
                 {
                     if (MouseRaycast(ray, out RaycastHit itemHit, out GameObject collider, height * 2f, -1,
                         settings.paintOnPalettePrefabs, settings.paintOnMeshesWithoutCollider,
-                        tags: null, terrainLayers: null, exceptions:objArray))
+                        tags: null, terrainLayers: null, exceptions: objSet))
                     {
                         itemPosition = itemHit.point;
                         normal = itemHit.normal;
@@ -827,6 +839,8 @@ namespace PluginMaster
 
         private static void ApplySelectedPersistentShape(bool deselectPoint)
         {
+            if (!_persistentItemWasEdited) return;
+            _persistentItemWasEdited = false;
             if (!ApplySelectedPersistentObject(deselectPoint, ref _editingPersistentShape, ref _initialPersistentShapeData,
                ref _selectedPersistentShapeData, ShapeManager.instance)) return;
             if (_initialPersistentShapeData == null) return;
@@ -1173,6 +1187,7 @@ namespace PluginMaster
             PWBCore.UpdateTempCollidersIfHierarchyChanged();
             _paintStroke.Clear();
             var settings = ShapeManager.settings;
+            float maxSurfaceHeight = 0f;
             for (int i = 0; i < brushstroke.Length; ++i)
             {
                 var strokeItem = brushstroke[i];
@@ -1182,7 +1197,7 @@ namespace PluginMaster
                 var bounds = BoundsUtils.GetBoundsRecursive(prefab.transform);
                 var pivotToCenter = bounds.center - prefab.transform.position;
                 var size = bounds.size;
-                var height = Mathf.Max(size.x, size.y, size.z) * 2;
+                var height = size.x + size.y + size.z + maxSurfaceHeight;
 
                 var normal = -settings.projectionDirection;
 
@@ -1193,12 +1208,17 @@ namespace PluginMaster
                 if (settings.mode != PaintOnSurfaceToolSettingsBase.PaintMode.ON_SHAPE)
                 {
                     if (MouseRaycast(ray, out RaycastHit itemHit, out GameObject collider, height * 2f, -1,
-                        settings.paintOnPalettePrefabs, settings.paintOnMeshesWithoutCollider))
+                        settings.paintOnPalettePrefabs, settings.paintOnMeshesWithoutCollider,
+                        sameOriginAsRay: false, origin: itemPosition))
                     {
                         itemPosition = itemHit.point;
                         normal = itemHit.normal;
                         var colObj = PWBCore.GetGameObjectFromTempCollider(collider);
                         if (colObj != null) surface = colObj.transform;
+                        var surfObj = PWBCore.GetGameObjectFromTempCollider(collider);
+                        var surfSize = BoundsUtils.GetBounds(surfObj.transform).size;
+                        var h = surfSize.x + surfSize.y + surfSize.z;
+                        maxSurfaceHeight = Mathf.Max(h, maxSurfaceHeight);
                     }
                     else if (settings.mode == PaintOnSurfaceToolSettingsBase.PaintMode.ON_SURFACE) continue;
                 }
