@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
+﻿using System.IO;
 using UnityEditor;
 using UnityEngine;
 
@@ -13,16 +8,16 @@ namespace TheraBytes.BetterUi.Editor
     {
         static readonly string[] ASMDEF_FILES =
             { 
-                "TheraBytes/BetterUI/Runtime/TheraBytes.BetterUi.Runtime.asmdef",
-                "TheraBytes/BetterUI/Editor/TheraBytes.BetterUi.Editor.asmdef",
-                "TheraBytes/BetterUI_TextMeshPro/Runtime/TheraBytes.BetterUi.asmref",
-                "TheraBytes/BetterUI_TextMeshPro/Editor/TheraBytes.BetterUi.Editor.asmref",
+                "Plugins/TheraBytes/BetterUI/Runtime/TheraBytes.BetterUi.Runtime.asmdef",
+                "Plugins/TheraBytes/BetterUI/Editor/TheraBytes.BetterUi.Editor.asmdef",
+                "Plugins/TheraBytes/BetterUI_TextMeshPro/Runtime/TheraBytes.BetterUi.asmref",
+                "Plugins/TheraBytes/BetterUI_TextMeshPro/Editor/TheraBytes.BetterUi.Editor.asmref",
             };
 
-        const string TEXTMESH_PRO_PATH = "TheraBytes/BetterUI_TextMeshPro";
+        const string TEXTMESH_PRO_PATH = "Plugins/TheraBytes/BetterUI_TextMeshPro";
 
-        const string PACKAGE_PATH_INCL_TMP = "TheraBytes/BetterUI/packages/asmdef_incl_TextMeshPro.unitypackage";
-        const string PACKAGE_PATH_EXCL_TMP = "TheraBytes/BetterUI/packages/asmdef_excl_TextMeshPro.unitypackage";
+        const string PACKAGE_PATH_INCL_TMP = "Plugins/TheraBytes/BetterUI/packages/asmdef_incl_TextMeshPro.unitypackage";
+        const string PACKAGE_PATH_EXCL_TMP = "Plugins/TheraBytes/BetterUI/packages/asmdef_excl_TextMeshPro.unitypackage";
 
         const string PERSISTENT_KEY = "asmdef";
 

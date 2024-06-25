@@ -15,7 +15,7 @@ namespace TheraBytes.BetterUi.Editor
         {
             EditorGUILayout.HelpBox(@"Calling an old method. You probably need to update the Better TextMesh Pro package.
 
-Please install the right 'BetterUI_TextMeshPro' package found at 'Assets/TheraBytes/BetterUI/Packages' (probably you need the package that ends with '_EditorPanelUI').
+Please install the right 'BetterUI_TextMeshPro' package found at 'Assets/Plugins/TheraBytes/BetterUI/Packages' (probably you need the package that ends with '_EditorPanelUI').
 
 For more information, please read the upgrade guide.", MessageType.Warning);
 

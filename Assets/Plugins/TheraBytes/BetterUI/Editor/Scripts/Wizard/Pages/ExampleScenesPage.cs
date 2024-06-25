@@ -1,9 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.IO;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
@@ -13,7 +9,7 @@ namespace TheraBytes.BetterUi.Editor
     public class ExampleScenesPage : WizardPage
     {
 
-        const string OVERVIEW_PACK = "TheraBytes/BetterUI/packages/Example_Overiew.unitypackage";
+        const string OVERVIEW_PACK = "Plugins/TheraBytes/BetterUI/packages/Example_Overiew.unitypackage";
 
         InstallPackageSelectionWizardPageElement customScreenTagExample;
 
@@ -170,8 +166,8 @@ namespace TheraBytes.BetterUi.Editor
 
         InstallPackageSelectionWizardPageElement CreateSelection(string exampleName)
         {
-            string package = Path.Combine(Application.dataPath, string.Format("TheraBytes/BetterUI/packages/Example_{0}.unitypackage", exampleName));
-            string folder = Path.Combine(Application.dataPath, string.Format("TheraBytes/BetterUI/Example/{0}", exampleName));
+            string package = Path.Combine(Application.dataPath, string.Format("Plugins/TheraBytes/BetterUI/packages/Example_{0}.unitypackage", exampleName));
+            string folder = Path.Combine(Application.dataPath, string.Format("Plugins/TheraBytes/BetterUI/Example/{0}", exampleName));
 
             var result = new InstallPackageSelectionWizardPageElement(exampleName, package, folder);
             result.MarkComplete();

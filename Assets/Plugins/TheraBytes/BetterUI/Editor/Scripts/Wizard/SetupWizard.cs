@@ -1,9 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using TheraBytes.BetterUi;
 using UnityEditor;
 using UnityEngine;
 
@@ -22,7 +18,7 @@ namespace TheraBytes.BetterUi.Editor
             {
                 if(spwd == null)
                 {
-                    string filePath = string.Format("{0}/TheraBytes/BetterUI/Editor/setup~.wizard", Application.dataPath);
+                    string filePath = string.Format("{0}/Plugins/TheraBytes/BetterUI/Editor/setup~.wizard", Application.dataPath);
                     spwd = new PersistentWizardData(filePath);
                 }
 

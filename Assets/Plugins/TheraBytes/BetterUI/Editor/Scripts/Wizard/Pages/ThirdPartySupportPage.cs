@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
+﻿using System.IO;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
@@ -11,8 +7,8 @@ namespace TheraBytes.BetterUi.Editor
 {
     public class ThirdPartySupportPage : WizardPage
     {
-        const string PACKAGE_PATH_TMP_OLD = "TheraBytes/BetterUI/packages/BetterUI_TextMeshPro_UiEditorPanel.unitypackage";
-        const string PACKAGE_PATH_TMP_NEW = "TheraBytes/BetterUI/packages/BetterUI_TextMeshPro_EditorPanelUI.unitypackage";
+        const string PACKAGE_PATH_TMP_OLD = "Plugins/TheraBytes/BetterUI/packages/BetterUI_TextMeshPro_UiEditorPanel.unitypackage";
+        const string PACKAGE_PATH_TMP_NEW = "Plugins/TheraBytes/BetterUI/packages/BetterUI_TextMeshPro_EditorPanelUI.unitypackage";
         private const string TMP_KEY = "TextMeshPro";
         public override string NameId { get { return "ThirdPartySupportPage"; } }
 
@@ -29,7 +25,7 @@ namespace TheraBytes.BetterUi.Editor
             Add(new SeparatorWizardPageElement());
             Add(new InfoWizardPageElement("TextMeth Pro", InfoType.Header));
 
-            string tmpAddOnPath = Path.Combine(Application.dataPath, "TheraBytes/BetterUI_TextMeshPro");
+            string tmpAddOnPath = Path.Combine(Application.dataPath, "Plugins/TheraBytes/BetterUI_TextMeshPro");
             if (Directory.Exists(tmpAddOnPath))
             {
                 Add(new InfoWizardPageElement("TextMesh Pro add-on is already installed."));

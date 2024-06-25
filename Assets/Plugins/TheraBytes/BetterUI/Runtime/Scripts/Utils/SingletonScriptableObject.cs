@@ -87,13 +87,13 @@ namespace TheraBytes.BetterUi
             Type t = typeof(T);
             var prop = t.GetProperty("FilePath", BindingFlags.Static | BindingFlags.GetProperty | BindingFlags.NonPublic);
 
-            if (prop == null) throw new Exception("No static Property 'FilePath' in " + t.ToString());
+            if (prop == null) throw new Exception("No static Property 'FilePath' in " + t);
 
             string filePath = prop.GetValue(null, null) as string;
 
-            if (filePath == null) throw new Exception("static property 'FilePath' is not a string or null in " + t.ToString());
+            if (filePath == null) throw new Exception("static property 'FilePath' is not a string or null in " + t);
             if (!filePath.Contains("Resources")) throw new Exception("static property 'FilePath' must contain a Resources folder.");
-            if (filePath.Contains("Plugins")) throw new Exception("static property 'FilePath' must not contain a Plugin folder.");
+            //if (filePath.Contains("Plugins")) throw new Exception("static property 'FilePath' must not contain a Plugin folder.");
 
             if (!filePath.EndsWith(".asset"))
                 filePath += ".asset";
