@@ -6,8 +6,28 @@ namespace Network
 {
     public class PlayFabAuthService : MonoBehaviour
     {
+
+        public void Login(string id)
+        {
+            LoginWithCustomIDRequest request = new LoginWithCustomIDRequest()
+            {
+                CustomId = id,
+            };
+            PlayFabClientAPI.LoginWithCustomID(request,
+                // OnSuccess
+                result =>
+                {
+                    
+                },
+                // OnError
+                error =>
+                {
+                    
+                }
+            );
+        }
         
-        public void CheckLoginStatus(string email, string password)
+        public void Login(string email, string password)
         {
             LoginWithEmailAddressRequest request = new LoginWithEmailAddressRequest()
             {
@@ -24,8 +44,13 @@ namespace Network
                 error =>
                 {
                     
-                });
+                }
+            );
         }
-        
+
+        public void Logout()
+        {
+            
+        }
     }
 }
