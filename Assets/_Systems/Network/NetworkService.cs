@@ -18,41 +18,6 @@ namespace Network
         public PlayFabAuthService playFabAuthService;
         public PlayFabTitleService playFabTitleService;
 
-        private void Awake()
-        {
-            playFabAuthService.AddCallbacks(HandleAuthSuccess, HandleGetTitleDataFailed);
-            playFabTitleService.AddCallbacks(HandleGetTitleDataSuccess, HandleGetTitleDataFailed);
-        }
-
-        private void HandleAuthSuccess(ApiResponse obj)
-        {
-            playFabTitleService.InitializeService();
-            playFabTitleService.GetTitleData();
-        }
-
-        private void HandleGetTitleDataFailed(ApiResponse obj)
-        {
-            Debug.Log(obj.data);
-        }
-
-        private void HandleGetTitleDataSuccess(ApiResponse<TitleData> obj)
-        {
-            Debug.Log(obj.data);
-        }
-
-        private void Start()
-        {
-            playFabAuthService.InitializeService();
-            playFabAuthService.Login("CamiloGato");
-        }
-
-        [ContextMenu("Save")]
-        public void SaveData()
-        {
-            _storageData = new PlayerPrefsStorageData();
-            _storageData.SaveData<UserAuthData>("userDataAuth", userAuthData);
-        }
-        
         [ContextMenu("Load")]
         public void LoadData()
         {
