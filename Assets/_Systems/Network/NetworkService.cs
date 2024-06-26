@@ -1,6 +1,9 @@
-﻿using Data;
+﻿using System;
+using Data;
 using Data.Encrypt;
 using Data.Storage;
+using Network.PlayFab.Responses;
+using Network.PlayFab.Services;
 using UnityEngine;
 
 namespace Network
@@ -9,23 +12,52 @@ namespace Network
     {
         public string text;
         public string key;
-        public UserDataAuth userDataAuth;
+        public UserAuthData userAuthData;
         
         private IStorageData _storageData;
-        
-        
+        public PlayFabAuthService playFabAuthService;
+        public PlayFabTitleService playFabTitleService;
+
+        private void Awake()
+        {
+            playFabAuthService.AddCallbacks(HandleAuthSuccess, HandleGetTitleDataFailed);
+            playFabTitleService.AddCallbacks(HandleGetTitleDataSuccess, HandleGetTitleDataFailed);
+        }
+
+        private void HandleAuthSuccess(ApiResponse obj)
+        {
+            playFabTitleService.InitializeService();
+            playFabTitleService.GetTitleData();
+        }
+
+        private void HandleGetTitleDataFailed(ApiResponse obj)
+        {
+            Debug.Log(obj.data);
+        }
+
+        private void HandleGetTitleDataSuccess(ApiResponse<TitleData> obj)
+        {
+            Debug.Log(obj.data);
+        }
+
+        private void Start()
+        {
+            playFabAuthService.InitializeService();
+            playFabAuthService.Login("CamiloGato");
+        }
+
         [ContextMenu("Save")]
         public void SaveData()
         {
             _storageData = new PlayerPrefsStorageData();
-            _storageData.SaveData<UserDataAuth>("userDataAuth", userDataAuth);
+            _storageData.SaveData<UserAuthData>("userDataAuth", userAuthData);
         }
         
         [ContextMenu("Load")]
         public void LoadData()
         {
             _storageData = new PlayerPrefsStorageData();
-            userDataAuth = _storageData.GetData<UserDataAuth>("userDataAuth");
+            userAuthData = _storageData.GetData<UserAuthData>("userDataAuth");
         }
         
         [ContextMenu("Decrypt")]

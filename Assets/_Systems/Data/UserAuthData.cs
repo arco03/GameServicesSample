@@ -3,7 +3,7 @@
 namespace Data
 {
     [Serializable]
-    public class UserDataAuth
+    public class UserAuthData
     {
         public bool rememberMe;
         public string customId;
