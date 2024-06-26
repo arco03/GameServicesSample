@@ -1,8 +1,9 @@
 ﻿using System;
+using Cysharp.Threading.Tasks;
 using Data;
+using Data.Mappers;
 using Network.PlayFab.Data;
 using Network.PlayFab.Responses;
-using Newtonsoft.Json;
 using PlayFab;
 using PlayFab.ClientModels;
 using UnityEngine;
@@ -11,79 +12,68 @@ namespace Network.PlayFab.Services
 {
     public class PlayFabTitleService : MonoBehaviour, IPlayFabService
     {
-        #region Callbacks
-        
-        private Action<ApiResponse<TitleData>> _getTitleDataSuccess;
-        private Action<ApiResponse> _getTitleDataFailed;
-        
-        public void AddCallbacks(
-            Action<ApiResponse<TitleData>> getTitleDataSuccess,
-            Action<ApiResponse> getTitleDataFailed)
-        {
-            _getTitleDataSuccess += getTitleDataSuccess;
-            _getTitleDataFailed += getTitleDataFailed;
-        }
-        
-        public void RemoveCallbacks(
-            Action<ApiResponse<TitleData>> getTitleDataSuccess,
-            Action<ApiResponse> getTitleDataFailed)
-        {
-            _getTitleDataSuccess -= getTitleDataSuccess;
-            _getTitleDataFailed -= getTitleDataFailed;
-        }
-        
-        #endregion
         
         [SerializeField] private PlayFabAuthData playFabAuthData;
         [SerializeField] private PlayFabTitleData playFabTitleData;
         
         private PlayFabClientInstanceAPI _instanceAPI;
-        private PlayFabDataInstanceAPI _dataAPI;
-        
+
         public void InitializeService()
         {
             _instanceAPI = playFabAuthData.InstanceAPI;
-            _dataAPI = playFabAuthData.DataAPI;
         }
         
         #region Title Data
         
-        public void GetTitleData()
+        public async UniTask<ApiResponse<TitleData>> GetTitleData()
         {
-            GetTitleDataRequest request = new GetTitleDataRequest()
-            {
-                
-            };
+            GetTitleDataRequest request = new GetTitleDataRequest();
+            
+            UniTaskCompletionSource<ApiResponse<TitleData>> taskCompletionSource = new UniTaskCompletionSource<ApiResponse<TitleData>>();
+            
+            if (_instanceAPI == null) throw new Exception("PlayFab Instance API is null");
             
             _instanceAPI.GetTitleData(
                 request,
-                HandleGetTitleDataSuccess,
-                HandleGetTitleDataFailed
+                result =>
+                {
+                    ApiResponse<TitleData> response = HandleGetTitleDataSuccess(result);
+                    taskCompletionSource.TrySetResult(response);
+                },
+                error =>
+                {
+                    ApiResponse<TitleData> response = HandleGetTitleDataFailed(error);
+                    taskCompletionSource.TrySetResult(response);
+                }
             );
+            
+            return await taskCompletionSource.Task;
         }
 
         #endregion
         
         #region Handlers
         
-        private void HandleGetTitleDataSuccess(GetTitleDataResult result)
+        private ApiResponse<TitleData> HandleGetTitleDataSuccess(GetTitleDataResult result)
         {
             ApiResponse<TitleData> data = new ApiResponse<TitleData>()
             {
                 success = true,
-                // data = 
+                data = result.Data.MapToType<TitleData>()
             };
-            _getTitleDataSuccess?.Invoke(data);
+
+            return data;
         }
 
-        private void HandleGetTitleDataFailed(PlayFabError error)
+        private ApiResponse<TitleData> HandleGetTitleDataFailed(PlayFabError error)
         {
-            ApiResponse data = new ApiResponse()
+            ApiResponse<TitleData> data = new ApiResponse<TitleData>()
             {
                 success = false,
-                data = error.GenerateErrorReport()
+                error = error.GenerateErrorReport(),
             };
-            _getTitleDataFailed?.Invoke(data);
+            
+            return data;
         }
 
         #endregion

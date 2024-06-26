@@ -454,7 +454,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   playFabAuthData: {fileID: 11400000, guid: 7ca9b461aaf8f9947a78552a1eff840d, type: 2}
-  playFabTitleData: {fileID: 0}
+  playFabTitleData: {fileID: 11400000, guid: f1b87d46899c50e46978a8340de3efcc, type: 2}
 --- !u!1 &776767083
 GameObject:
   m_ObjectHideFlags: 0
@@ -1010,6 +1010,10 @@ MonoBehaviour:
     rememberMe: 0
     customId: 
     email: 
+  titleData:
+    gameData:
+      titleKey: 
+      message: 
   playFabAuthService: {fileID: 776767085}
   playFabTitleService: {fileID: 575735418}
 --- !u!1 &2095246226
