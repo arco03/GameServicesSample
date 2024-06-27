@@ -6,21 +6,24 @@ using Network.PlayFab.Data;
 using Network.PlayFab.Responses;
 using PlayFab;
 using PlayFab.ClientModels;
-using UnityEngine;
 
 namespace Network.PlayFab.Services
 {
-    public class PlayFabTitleService : MonoBehaviour, IPlayFabService
+    public class PlayFabTitleService
     {
         
-        [SerializeField] private PlayFabAuthData playFabAuthData;
-        [SerializeField] private PlayFabTitleData playFabTitleData;
-        
+        private readonly PlayFabAuthData _playFabAuthData;
+
+        public PlayFabTitleService(PlayFabAuthData playFabAuthData)
+        {
+            _playFabAuthData = playFabAuthData;
+        }
+
         private PlayFabClientInstanceAPI _instanceAPI;
 
-        public void InitializeService()
+        public void Initialize()
         {
-            _instanceAPI = playFabAuthData.InstanceAPI;
+            _instanceAPI = _playFabAuthData.InstanceAPI;
         }
         
         #region Title Data

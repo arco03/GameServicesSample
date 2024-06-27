@@ -1,10 +1,10 @@
-﻿using System;
-using Data;
+﻿using Data;
 using Data.Encrypt;
 using Data.Storage;
 using Network.PlayFab.Responses;
 using Network.PlayFab.Services;
 using UnityEngine;
+using Zenject;
 
 namespace Network
 {
@@ -16,22 +16,23 @@ namespace Network
         public TitleData titleData;
         
         private IStorageData _storageData;
-        public PlayFabAuthService playFabAuthService;
-        public PlayFabTitleService playFabTitleService;
+        
+        [Inject] private PlayFabAuthService _playFabAuthService;
+        [Inject] private PlayFabTitleService _playFabTitleService;
         
         [ContextMenu("Test")]
         public async void Test()
         {
-            playFabAuthService.InitializeService();
-            ApiResponse login = await playFabAuthService.Login("CamiloGato");
+            _playFabAuthService.Initialize();
+            ApiResponse login = await _playFabAuthService.Login("CamiloGato");
             if (!login)
             {
                 Debug.Log(login);
                 return;
             }
             
-            playFabTitleService.InitializeService();
-            ApiResponse<TitleData> data = await playFabTitleService.GetTitleData();
+            _playFabTitleService.Initialize();
+            ApiResponse<TitleData> data = await _playFabTitleService.GetTitleData();
             titleData = data.data;
         }
         

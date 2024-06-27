@@ -3,17 +3,21 @@ using Network.PlayFab.Data;
 using Network.PlayFab.Responses;
 using PlayFab;
 using PlayFab.ClientModels;
-using UnityEngine;
 
 namespace Network.PlayFab.Services
 {
-    public class PlayFabAuthService : MonoBehaviour, IPlayFabService
+    public class PlayFabAuthService
     {
-        [SerializeField] private PlayFabAuthData playFabAuthData;
+        private readonly PlayFabAuthData _playFabAuthData;
 
-        public void InitializeService()
+        public PlayFabAuthService(PlayFabAuthData playFabAuthData)
         {
-            playFabAuthData.InstanceAPI = new PlayFabClientInstanceAPI(PlayFabSettings.staticSettings);
+            _playFabAuthData = playFabAuthData;
+        }
+
+        public void Initialize()
+        {
+            _playFabAuthData.InstanceAPI = new PlayFabClientInstanceAPI(PlayFabSettings.staticSettings);
         }
         
         #region Login & Register
@@ -27,7 +31,7 @@ namespace Network.PlayFab.Services
             
             UniTaskCompletionSource<ApiResponse> taskCompletionSource = new UniTaskCompletionSource<ApiResponse>();
             
-            playFabAuthData.InstanceAPI.LoginWithCustomID(
+            _playFabAuthData.InstanceAPI.LoginWithCustomID(
                 request,
                 result =>
                 {
@@ -55,7 +59,7 @@ namespace Network.PlayFab.Services
             
             UniTaskCompletionSource<ApiResponse> taskCompletionSource = new UniTaskCompletionSource<ApiResponse>();
             
-            playFabAuthData.InstanceAPI.LoginWithEmailAddress(
+            _playFabAuthData.InstanceAPI.LoginWithEmailAddress(
                 request,
                 result =>
                 {
@@ -83,7 +87,7 @@ namespace Network.PlayFab.Services
 
             UniTaskCompletionSource<ApiResponse> taskCompletionSource = new UniTaskCompletionSource<ApiResponse>();
             
-            playFabAuthData.InstanceAPI.RegisterPlayFabUser(
+            _playFabAuthData.InstanceAPI.RegisterPlayFabUser(
                 request,
                 result =>
                 {
@@ -105,7 +109,7 @@ namespace Network.PlayFab.Services
         #region Handlers
         private ApiResponse HandleLoginSuccess(LoginResult result)
         {
-            playFabAuthData.DataAPI =  new PlayFabDataInstanceAPI(playFabAuthData.InstanceAPI.authenticationContext);
+            _playFabAuthData.DataAPI =  new PlayFabDataInstanceAPI(_playFabAuthData.InstanceAPI.authenticationContext);
             
             ApiResponse apiResponse = new ApiResponse()
             {
@@ -118,7 +122,7 @@ namespace Network.PlayFab.Services
         
         private ApiResponse HandleRegisterSuccess(RegisterPlayFabUserResult result)
         {
-            playFabAuthData.DataAPI =  new PlayFabDataInstanceAPI(playFabAuthData.InstanceAPI.authenticationContext);
+            _playFabAuthData.DataAPI =  new PlayFabDataInstanceAPI(_playFabAuthData.InstanceAPI.authenticationContext);
             
             ApiResponse apiResponse = new ApiResponse()
             {
