@@ -33,8 +33,10 @@ namespace Data.Mappers
 
         private static object ConvertFieldValue(Type fieldType, string value)
         {
+            // TODO: Change this method
             return 
-                fieldType.IsPrimitive
+                fieldType == typeof(string) || fieldType == typeof(int) ||
+                fieldType == typeof(float) || fieldType == typeof(bool)
                     ? Convert.ChangeType(value, fieldType)
                     : JsonConvert.DeserializeObject(value, fieldType);
         }
