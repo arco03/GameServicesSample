@@ -1,5 +1,6 @@
 ﻿using Data;
 using Data.Encrypt;
+using Data.Models;
 using Data.Storage;
 using Network.PlayFab.Responses;
 using Network.PlayFab.Services;
@@ -15,8 +16,7 @@ namespace Network
         public UserAuthData userAuthData;
         public TitleData titleData;
         
-        private IStorageData _storageData;
-        
+        [Inject] private IStorageData _storageData;
         [Inject] private PlayFabAuthService _playFabAuthService;
         [Inject] private PlayFabTitleService _playFabTitleService;
         
@@ -39,7 +39,6 @@ namespace Network
         [ContextMenu("Load")]
         public void LoadData()
         {
-            _storageData = new PlayerPrefsStorageData();
             userAuthData = _storageData.GetData<UserAuthData>("userDataAuth");
         }
         

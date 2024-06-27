@@ -2,6 +2,7 @@
 using Cysharp.Threading.Tasks;
 using Data;
 using Data.Mappers;
+using Data.Models;
 using Network.PlayFab.Data;
 using Network.PlayFab.Responses;
 using PlayFab;
