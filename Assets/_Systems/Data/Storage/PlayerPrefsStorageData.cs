@@ -6,7 +6,7 @@ namespace Data.Storage
 {
     public class PlayerPrefsStorageData : IStorageData
     {
-        public T GetData<T>(string fileName) where T : new()
+        public T GetData<T>() where T : new()
         {
             Type type = typeof(T);
             PropertyInfo[] properties = type.GetProperties();
@@ -40,7 +40,7 @@ namespace Data.Storage
             return data;
         }
 
-        public void SaveData<T>(string fileName, T data) where T : new()
+        public void SaveData<T>(T data) where T : new()
         {
             Type type = typeof(T);
             PropertyInfo[] properties = type.GetProperties();

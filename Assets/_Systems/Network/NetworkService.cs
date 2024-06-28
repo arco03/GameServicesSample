@@ -39,7 +39,7 @@ namespace Network
         [ContextMenu("Load")]
         public void LoadData()
         {
-            userAuthData = _storageData.GetData<UserAuthData>("userDataAuth");
+            userAuthData = _storageData.GetData<UserAuthData>();
         }
         
         [ContextMenu("Decrypt")]
