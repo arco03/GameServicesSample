@@ -75,3 +75,5 @@ Assets/PlayFab/PlayFabEditorExtensions/Editor/Resources/PlayFabEditorPrefsSO.ass
 /Assets/PlayFabEditorExtensions/Editor/Resources
 /Assets/PlayFab/PlayFabSDK/Shared/Public/Resources
 .vscode
+Assets/_Data/Secrets
+Assets/_Data/Secrets.meta
