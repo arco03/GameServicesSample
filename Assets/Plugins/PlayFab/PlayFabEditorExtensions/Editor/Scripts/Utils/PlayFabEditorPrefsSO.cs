@@ -23,9 +23,9 @@ namespace PlayFab.PfEditor
                 if (_instance)
                     return _instance;
 
-                PlayFabEditorPrefsSO[] settingsList = Resources.LoadAll<PlayFabEditorPrefsSO>("PlayFabEditorPrefsSO");
-                if (settingsList.Length == 1)
-                    _instance = settingsList[0];
+                PlayFabEditorPrefsSO settingsList = AssetDatabase.LoadAssetAtPath<PlayFabEditorPrefsSO>($"Assets/{FileDir}/PlayFabEditorPrefsSO.asset");
+                if (settingsList)
+                    _instance = settingsList;
                 
                 if (_instance)
                     return _instance;
