@@ -2,6 +2,7 @@ using PlayFab.Internal;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using UnityEditor;
 using UnityEngine;
 
 namespace PlayFab
@@ -75,13 +76,12 @@ namespace PlayFab
 
         private static PlayFabSharedSettings GetSharedSettingsObjectPrivate()
         {
-            var settingsList = Resources.LoadAll<PlayFabSharedSettings>("PlayFabSharedSettings");
-            if (settingsList.Length != 1)
+            PlayFabSharedSettings settingsList = AssetDatabase.LoadAssetAtPath<PlayFabSharedSettings>("Assets/_Data/Secrets/PlayFabSdk/PlayFabSharedSettings.asset");
+            if (!settingsList)
             {
-                Debug.LogWarning("The number of PlayFabSharedSettings objects should be 1: " + settingsList.Length);
                 Debug.LogWarning("If you are upgrading your SDK, you can ignore this warning as PlayFabSharedSettings will be imported soon. If you are not upgrading your SDK and you see this message, you should re-download the latest PlayFab source code.");
             }
-            return settingsList[0];
+            return settingsList;
         }
 
         public static string DeviceUniqueIdentifier

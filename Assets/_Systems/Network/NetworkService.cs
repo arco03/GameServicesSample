@@ -2,6 +2,7 @@
 using Data.Encrypt;
 using Data.Models;
 using Data.Storage;
+using Network.Azure.BlobStorage;
 using Network.PlayFab.Responses;
 using Network.PlayFab.Services;
 using UnityEngine;
@@ -19,6 +20,7 @@ namespace Network
         [Inject] private IStorageData _storageData;
         [Inject] private PlayFabAuthService _playFabAuthService;
         [Inject] private PlayFabTitleService _playFabTitleService;
+        [Inject] private StorageManager _storageManager;
         
         [ContextMenu("Test")]
         public async void Test()
@@ -34,6 +36,8 @@ namespace Network
             _playFabTitleService.Initialize();
             ApiResponse<TitleData> data = await _playFabTitleService.GetTitleData();
             titleData = data.data;
+            
+            await _storageManager.DownloadFileAsync("titleData.json", "C:/Users/cmand/Documents/Git/MyPersonalGame/Assets/_Data/titleData.json");
         }
         
         [ContextMenu("Load")]
