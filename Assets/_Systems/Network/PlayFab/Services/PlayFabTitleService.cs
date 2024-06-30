@@ -1,6 +1,5 @@
 ﻿using System;
 using Cysharp.Threading.Tasks;
-using Data;
 using Data.Mappers;
 using Data.Models;
 using Network.PlayFab.Data;
