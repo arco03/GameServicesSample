@@ -1,58 +1,54 @@
-﻿using System;
+﻿using Cysharp.Threading.Tasks;
 using Network.PlayFab.Data;
 using Network.PlayFab.Responses;
 using PlayFab;
 using PlayFab.ClientModels;
-using UnityEngine;
 
 namespace Network.PlayFab.Services
 {
-    public class PlayFabAuthService : MonoBehaviour, IPlayFabService
+    public class PlayFabAuthService
     {
-        #region Callbacks
-        
-        private Action<ApiResponse> _loginSuccess;
-        private Action<ApiResponse> _loginFailed;
+        private readonly PlayFabAuthData _playFabAuthData;
 
-        public void AddCallbacks(Action<ApiResponse> loginSuccess, Action<ApiResponse> loginFailed)
+        public PlayFabAuthService(PlayFabAuthData playFabAuthData)
         {
-            _loginSuccess += loginSuccess;
-            _loginFailed += loginFailed;
+            _playFabAuthData = playFabAuthData;
         }
-        
-        public void RemoveCallbacks(Action<ApiResponse> loginSuccess, Action<ApiResponse> loginFailed)
-        {
-            _loginSuccess -= loginSuccess;
-            _loginFailed -= loginFailed;
-        }
-        
-        #endregion
-        
-        [SerializeField] private PlayFabAuthData playFabAuthData;
 
-        public void InitializeService()
+        public void Initialize()
         {
-            playFabAuthData.InstanceAPI = new PlayFabClientInstanceAPI(PlayFabSettings.staticSettings);
+            _playFabAuthData.InstanceAPI = new PlayFabClientInstanceAPI(PlayFabSettings.staticSettings);
         }
         
         #region Login & Register
-        public void Login(string id)
+        public async UniTask<ApiResponse> Login(string id)
         {
             LoginWithCustomIDRequest request = new LoginWithCustomIDRequest()
             {
                 TitleId = PlayFabSettings.TitleId,
                 CustomId = id,
-                CreateAccount = true
             };
             
-            playFabAuthData.InstanceAPI.LoginWithCustomID(
+            UniTaskCompletionSource<ApiResponse> taskCompletionSource = new UniTaskCompletionSource<ApiResponse>();
+            
+            _playFabAuthData.InstanceAPI.LoginWithCustomID(
                 request,
-                HandleLoginSuccess,
-                HandleLoginFailed
+                result =>
+                {
+                    ApiResponse response = HandleLoginSuccess(result);
+                    taskCompletionSource.TrySetResult(response);
+                },
+                error =>
+                {
+                    ApiResponse response = HandleLoginFailed(error);
+                    taskCompletionSource.TrySetResult(response);
+                }
             );
+            
+            return await taskCompletionSource.Task;
         }
         
-        public void Login(string email, string password)
+        public async UniTask<ApiResponse> Login(string email, string password)
         {
             LoginWithEmailAddressRequest request = new LoginWithEmailAddressRequest()
             {
@@ -61,14 +57,26 @@ namespace Network.PlayFab.Services
                 Password = password,
             };
             
-            playFabAuthData.InstanceAPI.LoginWithEmailAddress(
+            UniTaskCompletionSource<ApiResponse> taskCompletionSource = new UniTaskCompletionSource<ApiResponse>();
+            
+            _playFabAuthData.InstanceAPI.LoginWithEmailAddress(
                 request,
-                HandleLoginSuccess,
-                HandleLoginFailed
+                result =>
+                {
+                    ApiResponse response = HandleLoginSuccess(result);
+                    taskCompletionSource.TrySetResult(response);
+                },
+                error =>
+                {
+                    ApiResponse response = HandleLoginFailed(error);
+                    taskCompletionSource.TrySetResult(response);
+                }
             );
+            
+            return await taskCompletionSource.Task;
         }
 
-        public void Register(string email, string password)
+        public async UniTask<ApiResponse> Register(string email, string password)
         {
             RegisterPlayFabUserRequest request = new RegisterPlayFabUserRequest()
             {
@@ -76,52 +84,63 @@ namespace Network.PlayFab.Services
                 Email = email,
                 Password = password,
             };
+
+            UniTaskCompletionSource<ApiResponse> taskCompletionSource = new UniTaskCompletionSource<ApiResponse>();
             
-            playFabAuthData.InstanceAPI.RegisterPlayFabUser(
+            _playFabAuthData.InstanceAPI.RegisterPlayFabUser(
                 request,
-                HandleRegisterSuccess,
-                HandleLoginFailed
+                result =>
+                {
+                    ApiResponse response = HandleRegisterSuccess(result);
+                    taskCompletionSource.TrySetResult(response);
+                },
+                error =>
+                {
+                    ApiResponse response = HandleLoginFailed(error);
+                    taskCompletionSource.TrySetResult(response);
+                }
             );
+            
+            return await taskCompletionSource.Task;
         }
         
         #endregion
         
         #region Handlers
-        private void HandleLoginSuccess(LoginResult result)
+        private ApiResponse HandleLoginSuccess(LoginResult result)
         {
-            playFabAuthData.DataAPI =  new PlayFabDataInstanceAPI(playFabAuthData.InstanceAPI.authenticationContext);
+            _playFabAuthData.DataAPI =  new PlayFabDataInstanceAPI(_playFabAuthData.InstanceAPI.authenticationContext);
             
             ApiResponse apiResponse = new ApiResponse()
             {
                 success = true,
-                data = "Logged in successfully"
+                data = result.LastLoginTime.ToString()
             };
             
-            _loginSuccess?.Invoke(apiResponse);
+            return apiResponse;
         }
         
-        private void HandleRegisterSuccess(RegisterPlayFabUserResult result)
+        private ApiResponse HandleRegisterSuccess(RegisterPlayFabUserResult result)
         {
-            playFabAuthData.DataAPI =  new PlayFabDataInstanceAPI(playFabAuthData.InstanceAPI.authenticationContext);
+            _playFabAuthData.DataAPI =  new PlayFabDataInstanceAPI(_playFabAuthData.InstanceAPI.authenticationContext);
             
             ApiResponse apiResponse = new ApiResponse()
             {
                 success = true,
-                data = "Registered successfully"
+                data = result.Username
             };
             
-            _loginSuccess?.Invoke(apiResponse);
+            return apiResponse;
         }
         
-        private void HandleLoginFailed(PlayFabError error)
+        private ApiResponse HandleLoginFailed(PlayFabError error)
         {
             ApiResponse apiResponse = new ApiResponse()
             {
                 success = false,
                 data = error.GenerateErrorReport()
             };
-            
-            _loginFailed?.Invoke(apiResponse);
+            return apiResponse;
         }
         
         #endregion
